@@ -20,16 +20,16 @@ export default function Login() {
   };
 
   return (
-    <div className="flex items-center justify-center">
+    <div className="min-h-screen flex items-center justify-center">
       <div className="max-w-md w-full bg-white rounded-3xl shadow-2xl overflow-hidden">
         <div className="px-6 pt-3 pb-6">
           <div className="flex flex-col items-center mb-2">
             <div className="w-32 h-32 bg-gray-100 rounded-full mb-4 flex items-center justify-center border-4 border-pink-200">
-            <img
-                  src="/logo.jpeg"
-                  alt="Logo da Joaninha Baby Kids"
-                  className="w-28 h-28 rounded-full object-cover"
-                />
+              <img
+                src="/logo.jpeg"
+                alt="Logo da Joaninha Baby Kids"
+                className="w-28 h-28 rounded-full object-cover"
+              />
             </div>
             <h2 className="text-3xl font-bold text-center text-gray-800 mb-2">
               Joaninha Baby Kids
