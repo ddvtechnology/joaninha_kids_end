@@ -26,7 +26,7 @@ export default function Login() {
           <div className="flex flex-col items-center mb-2">
             <div className="w-32 h-32 bg-gray-100 rounded-full mb-4 flex items-center justify-center border-4 border-pink-200">
             <img
-                  src="././public/logo.jpeg"
+                  src="/logo.jpeg"
                   alt="Logo da Joaninha Baby Kids"
                   className="w-28 h-28 rounded-full object-cover"
                 />
