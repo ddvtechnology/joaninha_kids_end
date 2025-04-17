@@ -255,8 +255,13 @@ const Dashboard = () => {
             </div>
             <div>
               <h2 className="text-2xl font-bold text-gray-900">
-                {getGreeting()}, {user?.email === "joannamarques.jm19@gmail.com" ? "Joanna Marques" : user?.email?.split('@')[0]}!
+                {getGreeting()}, {user?.email === "joannamarques.jm19@gmail.com"
+                  ? "Joanna Marques"
+                  : user?.email === "michellyc.gomes@hotmail.com"
+                    ? "Michelly Gomes"
+                    : user?.email?.split('@')[0]}!
               </h2>
+
               <p className="text-gray-500">Hoje é {weekday}, tenha um ótimo dia!</p>
             </div>
 

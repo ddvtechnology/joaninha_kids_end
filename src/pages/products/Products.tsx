@@ -16,7 +16,8 @@ export default function Products() {
   const [formData, setFormData] = useState({
     name: '',
     category: 'VESTIDOS' as ProductCategory,
-    description: '',
+    brand: '',
+    reference: '',
     sale_price: '',
     stock_quantity: ''
   });
@@ -29,7 +30,7 @@ export default function Products() {
     const { data, error } = await supabase
       .from('products')
       .select('*')
-      .eq('hidden', true) // Corrigido: filtra os ativos
+      .eq('hidden', true)
       .order('name');
 
     if (error) {
@@ -51,7 +52,8 @@ export default function Products() {
     setFormData({
       name: '',
       category: 'VESTIDOS',
-      description: '',
+      brand: '',
+      reference: '',
       sale_price: '',
       stock_quantity: ''
     });
@@ -63,7 +65,8 @@ export default function Products() {
     setFormData({
       name: product.name,
       category: product.category,
-      description: product.description || '',
+      brand: product.brand || '',
+      reference: product.reference || '',
       sale_price: product.sale_price?.toString() || '',
       stock_quantity: product.stock_quantity?.toString() || ''
     });
@@ -133,7 +136,8 @@ export default function Products() {
   const filteredProducts = products.filter((product) => {
     const matchesSearch =
       product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      product.description?.toLowerCase().includes(searchTerm.toLowerCase());
+      product.brand?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      product.reference?.toLowerCase().includes(searchTerm.toLowerCase());
 
     const matchesCategory = !selectedCategory || product.category === selectedCategory;
     return matchesSearch && matchesCategory;
@@ -190,6 +194,8 @@ export default function Products() {
               <thead>
                 <tr className="border-b border-gray-200">
                   <th className="text-left py-4 px-4 font-semibold text-gray-600">Nome</th>
+                  <th className="text-left py-4 px-4 font-semibold text-gray-600">Marca</th>
+                  <th className="text-left py-4 px-4 font-semibold text-gray-600">Referência</th>
                   <th className="text-left py-4 px-4 font-semibold text-gray-600">Categoria</th>
                   <th className="text-right py-4 px-4 font-semibold text-gray-600">Preço</th>
                   <th className="text-right py-4 px-4 font-semibold text-gray-600">Estoque</th>
@@ -200,12 +206,13 @@ export default function Products() {
                 {filteredProducts.map((product) => (
                   <tr key={product.id} className="border-b border-gray-100 hover:bg-gray-50">
                     <td className="py-4 px-4">
-                      <div>
-                        <p className="font-medium text-gray-900">{product.name}</p>
-                        {product.description && (
-                          <p className="text-sm text-gray-500">{product.description}</p>
-                        )}
-                      </div>
+                      <p className="font-medium text-gray-900">{product.name}</p>
+                    </td>
+                    <td className="py-4 px-4">
+                      <p className="text-gray-700">{product.brand || '-'}</p>
+                    </td>
+                    <td className="py-4 px-4">
+                      <p className="text-gray-700">{product.reference || '-'}</p>
                     </td>
                     <td className="py-4 px-4">{product.category}</td>
                     <td className="py-4 px-4 text-right">R$ {(product.sale_price ?? 0).toFixed(2)}</td>
@@ -294,13 +301,24 @@ export default function Products() {
                   </select>
                 </div>
 
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
-                  <textarea
-                    name="description"
-                    value={formData.description}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Marca</label>
+                  <input
+                    type="text"
+                    name="brand"
+                    value={formData.brand}
                     onChange={handleInputChange}
-                    rows={3}
+                    className="w-full px-4 py-2 rounded-xl border-2 border-gray-200 focus:border-pink-500 focus:ring focus:ring-pink-200 focus:ring-opacity-50"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Referência</label>
+                  <input
+                    type="text"
+                    name="reference"
+                    value={formData.reference}
+                    onChange={handleInputChange}
                     className="w-full px-4 py-2 rounded-xl border-2 border-gray-200 focus:border-pink-500 focus:ring focus:ring-pink-200 focus:ring-opacity-50"
                   />
                 </div>

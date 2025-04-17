@@ -19,6 +19,8 @@ export default function Sales() {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('DINHEIRO');
   const [pointsInput, setPointsInput] = useState<number | ''>('');
   const userEditedPoints = useRef(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isProcessingSale, setIsProcessingSale] = useState(false);
 
   useEffect(() => {
     fetchProducts();
@@ -34,18 +36,28 @@ export default function Sales() {
   }, [cart]);
 
   const fetchProducts = async () => {
-    const { data, error } = await supabase
-      .from('products')
-      .select('*')
-      .eq('hidden', true) // <-- só pega produtos ativos
-      .order('name');
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .eq('hidden', true) // Mantido true conforme o original - produtos ativos
+        .order('name');
 
-    if (error) {
-      toast.error('Erro ao carregar produtos');
-      return;
+      if (error) {
+        toast.error('Erro ao carregar produtos');
+        console.error('Erro ao buscar produtos:', error);
+        return;
+      }
+
+      console.log(`Produtos carregados: ${data?.length || 0}`);
+      setProducts(data || []);
+    } catch (err) {
+      console.error('Erro inesperado ao buscar produtos:', err);
+      toast.error('Erro inesperado ao carregar produtos');
+    } finally {
+      setIsLoading(false);
     }
-
-    setProducts(data);
   };
 
   const fetchCustomers = async () => {
@@ -115,6 +127,11 @@ export default function Sales() {
   };
 
   const handleCreateCustomer = async () => {
+    if (!newCustomer.name.trim()) {
+      toast.error('O nome do cliente é obrigatório');
+      return;
+    }
+    
     const { data, error } = await supabase
       .from('customers')
       .insert([newCustomer])
@@ -133,11 +150,56 @@ export default function Sales() {
     setNewCustomer({ name: '', phone: '' });
   };
 
+  // Função para atualizar o estoque dos produtos
+  const updateProductStock = async (soldItems: CartItem[]) => {
+    try {
+      // Preparar atualizações de estoque para cada produto
+      const updates = soldItems.map(item => ({
+        id: item.id,
+        stock_quantity: item.stock_quantity - item.quantity
+      }));
+      
+      // Atualizar no banco de dados
+      for (const update of updates) {
+        const { error } = await supabase
+          .from('products')
+          .update({ stock_quantity: update.stock_quantity })
+          .eq('id', update.id);
+          
+        if (error) {
+          console.error(`Erro ao atualizar estoque do produto ${update.id}:`, error);
+          throw error;
+        }
+      }
+      
+      // Atualizar o estado local dos produtos
+      setProducts(prevProducts => 
+        prevProducts.map(product => {
+          const update = updates.find(u => u.id === product.id);
+          if (update) {
+            return { ...product, stock_quantity: update.stock_quantity };
+          }
+          return product;
+        })
+      );
+      
+      console.log('Estoques atualizados com sucesso!');
+    } catch (error) {
+      console.error('Erro ao atualizar estoques:', error);
+      toast.error('Erro ao atualizar estoques dos produtos');
+      throw error;
+    }
+  };
+
   const handleFinalizeSale = async () => {
     if (cart.length === 0) {
       toast.error('Adicione produtos ao carrinho');
       return;
     }
+    
+    // Impedir múltiplos cliques
+    if (isProcessingSale) return;
+    setIsProcessingSale(true);
 
     const total = calculateTotal();
     const points = calculatePoints();
@@ -188,6 +250,30 @@ export default function Sales() {
         return;
       }
 
+      // Atualizar estoque dos produtos vendidos
+      await updateProductStock(cart);
+
+      // Atualizar pontos do cliente se aplicável
+      if (selectedCustomer && points > 0) {
+        const newTotalPoints = (selectedCustomer.total_points || 0) + Number(points);
+        const { error: customerUpdateError } = await supabase
+          .from('customers')
+          .update({ total_points: newTotalPoints })
+          .eq('id', selectedCustomer.id);
+          
+        if (customerUpdateError) {
+          console.error('Erro ao atualizar pontos do cliente:', customerUpdateError);
+          toast.error('Erro ao atualizar pontos do cliente');
+        } else {
+          // Atualizar o estado local dos clientes
+          setCustomers(customers.map(c => 
+            c.id === selectedCustomer.id 
+              ? { ...c, total_points: newTotalPoints } 
+              : c
+          ));
+        }
+      }
+
       toast.success('Venda registrada com sucesso!');
       setCart([]);
       setSelectedCustomer(null);
@@ -197,6 +283,8 @@ export default function Sales() {
     } catch (error) {
       toast.error('Erro inesperado ao registrar venda');
       console.error('Unexpected error in handleFinalizeSale:', error);
+    } finally {
+      setIsProcessingSale(false);
     }
   };
 
@@ -204,6 +292,17 @@ export default function Sales() {
     userEditedPoints.current = true;
     const value = e.target.value;
     setPointsInput(value === '' ? '' : Number(value));
+  };
+  
+  // Verifica se a referência existe e é uma string antes de usar toLowerCase()
+  const isProductMatch = (product: Product, term: string) => {
+    const searchTerm = term.toLowerCase();
+    const nameMatch = product.name.toLowerCase().includes(searchTerm);
+    const referenceMatch = product.reference && 
+      typeof product.reference === 'string' && 
+      product.reference.toLowerCase().includes(searchTerm);
+    
+    return nameMatch || referenceMatch;
   };
 
   return (
@@ -224,39 +323,45 @@ export default function Sales() {
           </div>
         </div>
 
-        <div className="space-y-4">
-          {products
-            .filter(product =>
-              product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-              product.category.toLowerCase().includes(searchTerm.toLowerCase())
-            )
-            .map(product => (
-              <div
-                key={product.id}
-                className="flex items-center justify-between p-4 rounded-xl border border-gray-100 hover:border-pink-100 hover:bg-pink-50 transition-colors"
-              >
-                <div>
-                  <h3 className="font-medium text-gray-900">{product.name}</h3>
-                  <p className="text-sm text-gray-500">
-                    {product.category} - Estoque: {product.stock_quantity}
-                  </p>
+        {isLoading ? (
+          <div className="flex justify-center items-center p-8">
+            <p className="text-gray-500">Carregando produtos...</p>
+          </div>
+        ) : products.length === 0 ? (
+          <div className="flex justify-center items-center p-8">
+            <p className="text-gray-500">Nenhum produto encontrado</p>
+          </div>
+        ) : (
+          <div className="space-y-4 max-h-[600px] overflow-y-auto">
+            {products
+              .filter(product => !searchTerm || isProductMatch(product, searchTerm))
+              .map(product => (
+                <div
+                  key={product.id}
+                  className="flex items-center justify-between p-4 rounded-xl border border-gray-100 hover:border-pink-100 hover:bg-pink-50 transition-colors"
+                >
+                  <div>
+                    <h3 className="font-medium text-gray-900">{product.name}</h3>
+                    <p className="text-sm text-gray-500">
+                      {product.reference} - Estoque: {product.stock_quantity}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <p className="font-medium text-gray-900">
+                      R$ {product.sale_price.toFixed(2)}
+                    </p>
+                    <button
+                      onClick={() => addToCart(product)}
+                      disabled={product.stock_quantity <= 0}
+                      className="p-2 rounded-lg bg-pink-100 text-pink-600 hover:bg-pink-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Plus className="w-5 h-5" />
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-4">
-                  <p className="font-medium text-gray-900">
-                    R$ {product.sale_price.toFixed(2)}
-                  </p>
-                  <button
-                    onClick={() => addToCart(product)}
-                    disabled={product.stock_quantity === 0}
-                    className="p-2 rounded-lg bg-pink-100 text-pink-600 hover:bg-pink-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <Plus className="w-5 h-5" />
-                  </button>
-
-                </div>
-              </div>
-            ))}
-        </div>
+              ))}
+          </div>
+        )}
       </div>
 
       {/* Carrinho */}
@@ -318,7 +423,7 @@ export default function Sales() {
                 <option value="">Selecione um cliente</option>
                 {customers.map(customer => (
                   <option key={customer.id} value={customer.id}>
-                    {customer.name} - {customer.total_points} pontos
+                    {customer.name} - {customer.total_points || 0} pontos
                   </option>
                 ))}
               </select>
@@ -333,46 +438,53 @@ export default function Sales() {
         </div>
 
         {/* Itens do Carrinho */}
-        <div className="space-y-4 mb-6">
-          {cart.map(item => (
-            <div
-              key={item.id}
-              className="flex items-center justify-between p-4 rounded-xl bg-gray-50"
-            >
-              <div>
-                <h3 className="font-medium text-gray-900">{item.name}</h3>
-                <p className="text-sm text-gray-500">
-                  R$ {item.sale_price.toFixed(2)} x {item.quantity}
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
-                <p className="font-medium text-gray-900">
-                  R$ {(item.sale_price * item.quantity).toFixed(2)}
-                </p>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => updateQuantity(item.id, -1)}
-                    className="p-1 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200"
-                  >
-                    <Minus className="w-4 h-4" />
-                  </button>
-                  <span className="w-8 text-center">{item.quantity}</span>
-                  <button
-                    onClick={() => updateQuantity(item.id, 1)}
-                    className="p-1 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200"
-                  >
-                    <Plus className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => removeFromCart(item.id)}
-                    className="p-1 rounded-lg bg-red-100 text-red-600 hover:bg-red-200"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+        <div className="space-y-4 mb-6 max-h-[300px] overflow-y-auto">
+          {cart.length === 0 ? (
+            <div className="text-center py-6 text-gray-500">
+              Carrinho vazio. Adicione produtos para continuar.
+            </div>
+          ) : (
+            cart.map(item => (
+              <div
+                key={item.id}
+                className="flex items-center justify-between p-4 rounded-xl bg-gray-50"
+              >
+                <div>
+                  <h3 className="font-medium text-gray-900">{item.name}</h3>
+                  <p className="text-sm text-gray-500">
+                    R$ {item.sale_price.toFixed(2)} x {item.quantity}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <p className="font-medium text-gray-900">
+                    R$ {(item.sale_price * item.quantity).toFixed(2)}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => updateQuantity(item.id, -1)}
+                      className="p-1 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    >
+                      <Minus className="w-4 h-4" />
+                    </button>
+                    <span className="w-8 text-center">{item.quantity}</span>
+                    <button
+                      onClick={() => updateQuantity(item.id, 1)}
+                      className="p-1 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200"
+                      disabled={item.quantity >= item.stock_quantity}
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => removeFromCart(item.id)}
+                      className="p-1 rounded-lg bg-red-100 text-red-600 hover:bg-red-200"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
 
         {/* Forma de Pagamento */}
@@ -410,11 +522,17 @@ export default function Sales() {
           </div>
           <button
             onClick={handleFinalizeSale}
-            disabled={cart.length === 0}
+            disabled={cart.length === 0 || isProcessingSale}
             className="w-full py-3 bg-pink-600 text-white rounded-xl hover:bg-pink-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
-            <DollarSign className="w-5 h-5" />
-            Finalizar Venda
+            {isProcessingSale ? (
+              'Processando...'
+            ) : (
+              <>
+                <DollarSign className="w-5 h-5" />
+                Finalizar Venda
+              </>
+            )}
           </button>
         </div>
       </div>
