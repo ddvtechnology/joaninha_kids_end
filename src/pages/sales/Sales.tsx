@@ -37,13 +37,14 @@ export default function Sales() {
     const { data, error } = await supabase
       .from('products')
       .select('*')
+      .eq('hidden', true) // <-- só pega produtos ativos
       .order('name');
-    
+
     if (error) {
       toast.error('Erro ao carregar produtos');
       return;
     }
-    
+
     setProducts(data);
   };
 
@@ -52,42 +53,54 @@ export default function Sales() {
       .from('customers')
       .select('*')
       .order('name');
-    
+
     if (error) {
       toast.error('Erro ao carregar clientes');
       return;
     }
-    
+
     setCustomers(data);
   };
 
   const addToCart = (product: Product) => {
     setCart(currentCart => {
       const existingItem = currentCart.find(item => item.id === product.id);
-      
+
       if (existingItem) {
-        return currentCart.map(item =>
-          item.id === product.id
-            ? { ...item, quantity: item.quantity + 1 }
-            : item
-        );
+        if (existingItem.quantity < product.stock_quantity) {
+          return currentCart.map(item =>
+            item.id === product.id
+              ? { ...item, quantity: item.quantity + 1 }
+              : item
+          );
+        } else {
+          toast.error('Estoque insuficiente');
+          return currentCart;
+        }
       }
-      
+
       return [...currentCart, { ...product, quantity: 1 }];
     });
   };
+
 
   const updateQuantity = (productId: string, change: number) => {
     setCart(currentCart =>
       currentCart.map(item => {
         if (item.id === productId) {
-          const newQuantity = Math.max(0, item.quantity + change);
+          const newQuantity = item.quantity + change;
+          if (newQuantity <= 0) return null;
+          if (newQuantity > item.stock_quantity) {
+            toast.error('Estoque insuficiente');
+            return item;
+          }
           return { ...item, quantity: newQuantity };
         }
         return item;
-      }).filter(item => item.quantity > 0)
+      }).filter(Boolean) as CartItem[]
     );
   };
+
 
   const removeFromCart = (productId: string) => {
     setCart(currentCart => currentCart.filter(item => item.id !== productId));
@@ -213,7 +226,7 @@ export default function Sales() {
 
         <div className="space-y-4">
           {products
-            .filter(product => 
+            .filter(product =>
               product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
               product.category.toLowerCase().includes(searchTerm.toLowerCase())
             )
@@ -239,6 +252,7 @@ export default function Sales() {
                   >
                     <Plus className="w-5 h-5" />
                   </button>
+
                 </div>
               </div>
             ))}

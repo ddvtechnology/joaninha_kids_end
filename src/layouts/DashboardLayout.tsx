@@ -42,7 +42,7 @@ const DashboardLayout = () => {
               <div className="w-32 h-32 bg-gray-100 rounded-full mb-4 flex items-center justify-center border-4 border-pink-200">
                 <img
                   src="./public/logo.jpeg"
-                  alt="Logo da Loja"
+                  alt="Logo da Joaninha Baby Kids"
                   className="w-28 h-28 rounded-full object-cover"
                 />
               </div>

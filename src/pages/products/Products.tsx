@@ -29,19 +29,22 @@ export default function Products() {
     const { data, error } = await supabase
       .from('products')
       .select('*')
+      .eq('hidden', true) // Corrigido: filtra os ativos
       .order('name');
-    
+
     if (error) {
       toast.error('Erro ao carregar produtos');
       return;
     }
-    
+
     setProducts(data || []);
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+  const handleInputChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
+  ) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   const resetForm = () => {
@@ -68,19 +71,19 @@ export default function Products() {
   };
 
   const handleDelete = async (productId: string) => {
-    if (!confirm('Tem certeza que deseja excluir este produto?')) return;
+    if (!confirm('Tem certeza que deseja deletar este produto?')) return;
 
     const { error } = await supabase
       .from('products')
-      .delete()
+      .update({ hidden: false }) // Soft delete
       .eq('id', productId);
 
     if (error) {
-      toast.error('Erro ao excluir produto');
+      toast.error('Erro ao deletar produto');
       return;
     }
 
-    toast.success('Produto excluído com sucesso');
+    toast.success('Produto deletado com sucesso');
     fetchProducts();
   };
 
@@ -93,7 +96,8 @@ export default function Products() {
       stock_quantity: parseInt(formData.stock_quantity) || 0,
       updated_at: new Date().toISOString(),
       created_by: user?.email,
-      updated_by: user?.email
+      updated_by: user?.email,
+      hidden: true
     };
 
     if (editingProduct) {
@@ -126,15 +130,18 @@ export default function Products() {
     fetchProducts();
   };
 
-  const filteredProducts = products.filter(product => {
-    const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         product.description?.toLowerCase().includes(searchTerm.toLowerCase());
+  const filteredProducts = products.filter((product) => {
+    const matchesSearch =
+      product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      product.description?.toLowerCase().includes(searchTerm.toLowerCase());
+
     const matchesCategory = !selectedCategory || product.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
 
   return (
     <div>
+      {/* Cabeçalho */}
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-3">
           <Package2 className="w-8 h-8 text-pink-600" />
@@ -148,7 +155,8 @@ export default function Products() {
           Novo Produto
         </button>
       </div>
-      
+
+      {/* Filtros */}
       <div className="bg-white rounded-xl shadow-sm">
         <div className="p-6">
           <div className="flex items-center gap-4 mb-6">
@@ -168,14 +176,15 @@ export default function Products() {
               className="px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-pink-500 focus:ring focus:ring-pink-200 focus:ring-opacity-50 transition-colors"
             >
               <option value="">Todas as Categorias</option>
-              {PRODUCT_CATEGORIES.map(category => (
+              {PRODUCT_CATEGORIES.map((category) => (
                 <option key={category} value={category}>
                   {category.replace(/_/g, ' ')}
                 </option>
               ))}
             </select>
           </div>
-          
+
+          {/* Tabela de Produtos */}
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
@@ -201,11 +210,13 @@ export default function Products() {
                     <td className="py-4 px-4">{product.category}</td>
                     <td className="py-4 px-4 text-right">R$ {(product.sale_price ?? 0).toFixed(2)}</td>
                     <td className="py-4 px-4 text-right">
-                      <span className={`px-2 py-1 rounded-lg text-sm ${
-                        (product.stock_quantity ?? 0) <= 5
-                          ? 'bg-red-100 text-red-700'
-                          : 'bg-green-100 text-green-700'
-                      }`}>
+                      <span
+                        className={`px-2 py-1 rounded-lg text-sm ${
+                          (product.stock_quantity ?? 0) <= 5
+                            ? 'bg-red-100 text-red-700'
+                            : 'bg-green-100 text-green-700'
+                        }`}
+                      >
                         {product.stock_quantity ?? 0}
                       </span>
                     </td>
@@ -233,7 +244,7 @@ export default function Products() {
         </div>
       </div>
 
-      {/* Modal de Produto */}
+      {/* Modal de Cadastro/Edição */}
       {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
@@ -251,13 +262,11 @@ export default function Products() {
                 <X className="w-5 h-5" />
               </button>
             </div>
-            
+
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Nome
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Nome</label>
                   <input
                     type="text"
                     name="name"
@@ -267,11 +276,9 @@ export default function Products() {
                     className="w-full px-4 py-2 rounded-xl border-2 border-gray-200 focus:border-pink-500 focus:ring focus:ring-pink-200 focus:ring-opacity-50"
                   />
                 </div>
-                
+
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Categoria
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Categoria</label>
                   <select
                     name="category"
                     value={formData.category}
@@ -279,7 +286,7 @@ export default function Products() {
                     required
                     className="w-full px-4 py-2 rounded-xl border-2 border-gray-200 focus:border-pink-500 focus:ring focus:ring-pink-200 focus:ring-opacity-50"
                   >
-                    {PRODUCT_CATEGORIES.map(category => (
+                    {PRODUCT_CATEGORIES.map((category) => (
                       <option key={category} value={category}>
                         {category.replace(/_/g, ' ')}
                       </option>
@@ -288,9 +295,7 @@ export default function Products() {
                 </div>
 
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Descrição
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
                   <textarea
                     name="description"
                     value={formData.description}
@@ -301,9 +306,7 @@ export default function Products() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Preço de Venda
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Preço de Venda</label>
                   <input
                     type="number"
                     name="sale_price"
@@ -317,9 +320,7 @@ export default function Products() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Quantidade em Estoque
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Quantidade em Estoque</label>
                   <input
                     type="number"
                     name="stock_quantity"

@@ -20,12 +20,16 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-pink-50 via-purple-50 to-pink-50">
+    <div className="flex items-center justify-center">
       <div className="max-w-md w-full bg-white rounded-3xl shadow-2xl overflow-hidden">
-        <div className="px-8 pt-8 pb-6">
-          <div className="flex flex-col items-center mb-8">
-            <div className="w-32 h-32 bg-gray-100 rounded-full mb-6 flex items-center justify-center border-4 border-pink-200">
-              <BabyIcon className="w-24 h-24 text-pink-400" />
+        <div className="px-6 pt-3 pb-6">
+          <div className="flex flex-col items-center mb-2">
+            <div className="w-32 h-32 bg-gray-100 rounded-full mb-4 flex items-center justify-center border-4 border-pink-200">
+            <img
+                  src="./public/logo.jpeg"
+                  alt="Logo da Joaninha Baby Kids"
+                  className="w-28 h-28 rounded-full object-cover"
+                />
             </div>
             <h2 className="text-3xl font-bold text-center text-gray-800 mb-2">
               Joaninha Baby Kids
@@ -81,7 +85,7 @@ export default function Login() {
         </div>
         <div className="px-8 py-4 bg-gradient-to-r from-pink-50 to-purple-50 border-t border-gray-100">
           <p className="text-xs text-center text-gray-500">
-            © {new Date().getFullYear()} Joaninha Baby Kids. Todos os direitos reservados.
+            © {new Date().getFullYear()} DDV TECHNOLOGY. Todos os direitos reservados.
           </p>
         </div>
       </div>
