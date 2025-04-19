@@ -1,11 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { BarChart3, Calendar, ArrowDown, ArrowUp } from 'lucide-react';
+import { BarChart3, Calendar, ArrowDown, ArrowUp, FileDown, PieChart } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { format, startOfMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import type { Sale, Expense } from '../../types';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
+import { saveAs } from 'file-saver';
+import { utils, write } from 'xlsx';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 // Função para formatar data em português
 const formatDateInPtBR = (date) => {
@@ -65,6 +69,8 @@ export default function Reports() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [brandSalesData, setBrandSalesData] = useState<{brand: string, amount: number, percentage: number}[]>([]);
+  const [showBrandStats, setShowBrandStats] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -74,6 +80,7 @@ export default function Reports() {
     if (!startDate || !endDate) {
       setSales([]);
       setExpenses([]);
+      setBrandSalesData([]);
       setLoading(false);
       return;
     }
@@ -101,7 +108,7 @@ export default function Reports() {
       // Consulta de vendas
       let salesQuery = supabase
         .from('sales')
-        .select('*, customer:customers(name), items:sale_items(*)')
+        .select('*, customer:customers(name), items:sale_items(*, product:products(*))')
         .gte('created_at', startISO)
         .lte('created_at', endISO)
         .order('created_at', { ascending: false });
@@ -139,12 +146,56 @@ export default function Reports() {
 
       setSales(salesData || []);
       setExpenses(expensesData || []);
+      
+      // Processar dados de vendas por marca
+      if (salesData && salesData.length > 0) {
+        calculateBrandPercentages(salesData);
+      } else {
+        setBrandSalesData([]);
+      }
     } catch (error) {
       console.error('Erro inesperado:', error);
       setErrorMessage(`Erro inesperado: ${error.message}`);
     } finally {
       setLoading(false);
     }
+  };
+
+const calculateBrandPercentages = (salesData) => {
+    // Mapear todas as marcas e seus valores de venda
+    const brandMap: { [key: string]: number } = {};
+    let totalSaleAmount = 0;
+    
+    // Correção: garantir que estamos acessando corretamente os itens e produtos
+    salesData.forEach(sale => {
+      if (sale.items && Array.isArray(sale.items) && sale.items.length > 0) {
+        sale.items.forEach(item => {
+          if (item && item.product) {
+            const brand = item.product.brand || 'Sem marca';
+            const amount = (item.unit_price * item.quantity) || 0;
+            
+            if (!brandMap[brand]) {
+              brandMap[brand] = 0;
+            }
+            
+            brandMap[brand] += amount;
+            totalSaleAmount += amount;
+          }
+        });
+      }
+    });
+    
+    // Calcular percentagens
+    const brandStats = Object.keys(brandMap).map(brand => ({
+      brand,
+      amount: brandMap[brand],
+      percentage: totalSaleAmount > 0 ? (brandMap[brand] / totalSaleAmount) * 100 : 0
+    }));
+    
+    // Ordenar por valor de vendas (decrescente)
+    brandStats.sort((a, b) => b.amount - a.amount);
+    
+    setBrandSalesData(brandStats);
   };
 
   const calculateSummary = () => {
@@ -155,8 +206,8 @@ export default function Reports() {
       revenue,
       expenses: expensesSum,
       profit: revenue - expensesSum,
-      salesCount: sales.length,
-      averageTicket: sales.length > 0 ? revenueFromSales / sales.length : 0
+      salesCount: sales.length
+      // Removido: averageTicket
     };
   };
 
@@ -183,6 +234,239 @@ export default function Reports() {
       'CARTAO_CREDITO': 'Cartão de Crédito'
     };
     return methods[method] || method;
+  };
+
+  // Exportar para Excel
+  const exportToExcel = () => {
+    // Criar planilha
+    const wb = utils.book_new();
+    
+    // Dados do resumo
+    const summaryData = [
+      ['Período', `${formatDateInPtBR(startDate)} a ${formatDateInPtBR(endDate)}`],
+      ['Faturamento', `R$ ${summary.revenue.toFixed(2)}`],
+      ['Despesas', `R$ ${summary.expenses.toFixed(2)}`],
+      ['Lucro', `R$ ${summary.profit.toFixed(2)}`],
+      ['Número de Vendas', summary.salesCount]
+      // Removido: Ticket Médio
+    ];
+    
+    const summarySheet = utils.aoa_to_sheet(summaryData);
+    utils.book_append_sheet(wb, summarySheet, 'Resumo');
+    
+    // Dados de vendas
+    const salesData = [
+      ['Cliente', 'Produtos', 'Método de Pagamento', 'Data', 'Registrado por', 'Valor']
+    ];
+    
+    sales.forEach(sale => {
+      salesData.push([
+        sale.customer?.name || 'Cliente não identificado',
+        sale.items && sale.items.length > 0 
+          ? `${sale.items.length} produto(s): ${sale.items[0].product_name}${sale.items.length > 1 ? ' e outros' : ''}`
+          : 'Sem itens registrados',
+        translatePaymentMethod(sale.payment_method),
+        formatTimestamp(sale.created_at),
+        sale.created_by || 'Desconhecido',
+        `R$ ${sale.total_amount.toFixed(2)}`
+      ]);
+    });
+    
+    const salesSheet = utils.aoa_to_sheet(salesData);
+    
+    // Ajustar largura das colunas para o conteúdo
+    const salesColWidths = [
+      { wch: 30 }, // Cliente
+      { wch: 40 }, // Produtos
+      { wch: 20 }, // Método de Pagamento
+      { wch: 30 }, // Data
+      { wch: 20 }, // Registrado por
+      { wch: 15 }  // Valor
+    ];
+    salesSheet['!cols'] = salesColWidths;
+    
+    utils.book_append_sheet(wb, salesSheet, 'Vendas');
+    
+    // Dados de despesas
+    const expensesData = [
+      ['Descrição', 'Data', 'Registrado por', 'Valor']
+    ];
+    
+    expenses.forEach(expense => {
+      expensesData.push([
+        expense.description,
+        formatDateInPtBR(parseDateWithoutTimezone(expense.date)),
+        expense.created_by || 'Desconhecido',
+        `R$ ${expense.amount.toFixed(2)}`
+      ]);
+    });
+    
+    const expensesSheet = utils.aoa_to_sheet(expensesData);
+    
+    // Ajustar largura das colunas para o conteúdo
+    const expensesColWidths = [
+      { wch: 40 }, // Descrição
+      { wch: 30 }, // Data
+      { wch: 20 }, // Registrado por
+      { wch: 15 }  // Valor
+    ];
+    expensesSheet['!cols'] = expensesColWidths;
+    
+    utils.book_append_sheet(wb, expensesSheet, 'Despesas');
+    
+    // Dados de vendas por marca
+    const brandData = [
+      ['Marca', 'Valor Total', 'Percentagem']
+    ];
+    
+    brandSalesData.forEach(item => {
+      brandData.push([
+        item.brand,
+        `R$ ${item.amount.toFixed(2)}`,
+        `${item.percentage.toFixed(2)}%`
+      ]);
+    });
+    
+    const brandSheet = utils.aoa_to_sheet(brandData);
+    
+    // Ajustar largura das colunas para o conteúdo
+    const brandColWidths = [
+      { wch: 30 }, // Marca
+      { wch: 15 }, // Valor Total
+      { wch: 15 }  // Percentagem
+    ];
+    brandSheet['!cols'] = brandColWidths;
+    
+    utils.book_append_sheet(wb, brandSheet, 'Vendas por Marca');
+    
+    // Gerar arquivo e download
+    const excelBuffer = write(wb, { bookType: 'xlsx', type: 'array' });
+    const data = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    
+    // Formato do nome: relatorio_dd-mm-yyyy_a_dd-mm-yyyy.xlsx
+    const startDateFormatted = format(startDate, 'dd-MM-yyyy');
+    const endDateFormatted = format(endDate, 'dd-MM-yyyy');
+    saveAs(data, `relatorio_${startDateFormatted}_a_${endDateFormatted}.xlsx`);
+  };
+
+  // Exportar para PDF
+  const exportToPDF = () => {
+    try {
+      // Aumentando o tamanho da página para comportar mais conteúdo
+      const doc = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
+    
+      // Título
+      doc.setFontSize(18);
+      doc.text('Relatório Financeiro', 105, 15, { align: 'center' });
+    
+      // Período
+      doc.setFontSize(12);
+      doc.text(`Período: ${formatDateInPtBR(startDate)} a ${formatDateInPtBR(endDate)}`, 105, 25, { align: 'center' });
+    
+      // Resumo
+      doc.setFontSize(14);
+      doc.text('Resumo', 14, 35);
+    
+      // Garantir que autotable está disponível
+      let currentY = 40;
+      autoTable(doc, {
+        startY: currentY,
+        head: [['Métrica', 'Valor']],
+        body: [
+          ['Faturamento', `R$ ${summary.revenue.toFixed(2)}`],
+          ['Despesas', `R$ ${summary.expenses.toFixed(2)}`],
+          ['Lucro', `R$ ${summary.profit.toFixed(2)}`],
+          ['Número de Vendas', summary.salesCount.toString()]
+          // Removido: Ticket Médio
+        ],
+        theme: 'striped',
+        headStyles: { fillColor: [233, 30, 99] }
+      });
+      currentY = doc.lastAutoTable ? doc.lastAutoTable.finalY + 15 : currentY + 40;
+    
+      doc.setFontSize(14);
+      doc.text('Vendas por Marca', 14, currentY);
+    
+      if (brandSalesData.length > 0) {
+        autoTable(doc, {
+          startY: currentY + 5,
+          head: [['Marca', 'Valor Total', 'Percentagem']],
+          body: brandSalesData.map(item => [
+            item.brand,
+            `R$ ${item.amount.toFixed(2)}`,
+            `${item.percentage.toFixed(2)}%`
+          ]),
+          theme: 'striped',
+          headStyles: { fillColor: [233, 30, 99] }
+        });
+        currentY = doc.lastAutoTable ? doc.lastAutoTable.finalY + 15 : currentY + 40;
+      } else {
+        doc.setFontSize(12);
+        doc.text('Nenhum dado de marca disponível', 105, currentY + 10, { align: 'center' });
+        currentY += 40;
+      }
+    
+      // Novas páginas para vendas e despesas
+      doc.addPage();
+      currentY = 15;
+    
+      // Vendas
+      doc.setFontSize(14);
+      doc.text('Vendas', 14, currentY);
+    
+      if (sales.length > 0) {
+        autoTable(doc, {
+          startY: currentY + 5,
+          head: [['Cliente', 'Método de Pagamento', 'Data', 'Valor']],
+          body: sales.map(sale => [
+            sale.customer?.name || 'Cliente não identificado',
+            translatePaymentMethod(sale.payment_method),
+            formatTimestamp(sale.created_at),
+            `R$ ${sale.total_amount.toFixed(2)}`
+          ]),
+          theme: 'striped',
+          headStyles: { fillColor: [233, 30, 99] }
+        });
+      } else {
+        doc.setFontSize(12);
+        doc.text('Nenhuma venda no período selecionado', 105, currentY + 10, { align: 'center' });
+      }
+    
+      // Despesas
+      doc.addPage();
+      currentY = 15;
+      doc.setFontSize(14);
+      doc.text('Despesas', 14, currentY);
+    
+      if (expenses.length > 0) {
+        autoTable(doc, {
+          startY: currentY + 5,
+          head: [['Descrição', 'Data', 'Valor']],
+          body: expenses.map(expense => [
+            expense.description,
+            formatDateInPtBR(parseDateWithoutTimezone(expense.date)),
+            `R$ ${expense.amount.toFixed(2)}`
+          ]),
+          theme: 'striped',
+          headStyles: { fillColor: [233, 30, 99] }
+        });
+      } else {
+        doc.setFontSize(12);
+        doc.text('Nenhuma despesa no período selecionado', 105, currentY + 10, { align: 'center' });
+      }
+    
+      // Formato do nome: relatorio_dd-mm-yyyy_a_dd-mm-yyyy.pdf
+      const startDateFormatted = format(startDate, 'dd-MM-yyyy');
+      const endDateFormatted = format(endDate, 'dd-MM-yyyy');
+      doc.save(`relatorio_${startDateFormatted}_a_${endDateFormatted}.pdf`);
+    } catch (error) {
+      console.error('Erro ao gerar PDF:', error);
+      setErrorMessage(`Erro ao gerar PDF: ${error.message}. Verifique o console para mais detalhes.`);
+    }
   };
 
   return (
@@ -238,13 +522,42 @@ export default function Reports() {
         </div>
       )}
 
+      {/* Botões de exportação */}
+      <div className="flex justify-end gap-4 mb-6">
+        <button 
+          onClick={exportToPDF} 
+          disabled={loading || sales.length === 0} 
+          className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-xl hover:bg-red-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <FileDown className="w-5 h-5" />
+          Exportar PDF
+        </button>
+        <button 
+          onClick={exportToExcel} 
+          disabled={loading || sales.length === 0} 
+          className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-xl hover:bg-green-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <FileDown className="w-5 h-5" />
+          Exportar Excel
+        </button>
+      </div>
+
+      {/* Botão para mostrar/esconder estatísticas por marca */}
+      <button
+        onClick={() => setShowBrandStats(!showBrandStats)}
+        className="flex items-center gap-2 px-4 py-2 mb-6 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition"
+      >
+        <PieChart className="w-5 h-5" />
+        {showBrandStats ? 'Esconder Estatísticas por Marca' : 'Mostrar Estatísticas por Marca'}
+      </button>
+
       {loading ? (
         <div className="flex justify-center items-center p-12">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-pink-500"></div>
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
             <div className="bg-white rounded-2xl shadow-sm p-6">
               <div className="flex items-center justify-between mb-4">
                 <div className="p-2 bg-green-100 rounded-xl">
@@ -288,6 +601,45 @@ export default function Reports() {
             </div>
           </div>
 
+          {/* Estatísticas de vendas por marca */}
+          {showBrandStats && (
+            <div className="bg-white rounded-2xl shadow-sm p-6 mb-8">
+              <h2 className="text-lg font-semibold text-gray-900 mb-6">Vendas por Marca</h2>
+              
+              {brandSalesData.length === 0 ? (
+                <p className="text-center text-gray-500 py-6">Nenhum dado de marca disponível para este período</p>
+              ) : (
+                <div className="space-y-4">
+                  {brandSalesData.map((item, index) => (
+                    <div key={index} className="relative pt-1">
+                      <div className="flex mb-2 items-center justify-between">
+                        <div>
+                          <span className="text-sm font-semibold inline-block text-gray-900">
+                            {item.brand}
+                          </span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-sm font-semibold inline-block text-gray-900">
+                            {item.percentage.toFixed(2)}%
+                          </span>
+                          <span className="text-sm ml-2 text-gray-600">
+                            (R$ {item.amount.toFixed(2)})
+                          </span>
+                        </div>
+                      </div>
+                      <div className="overflow-hidden h-2 mb-4 text-xs flex rounded bg-gray-200">
+                        <div 
+                          style={{ width: `${item.percentage}%` }} 
+                          className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-pink-500"
+                        ></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="bg-white rounded-2xl shadow-sm p-6">
               <h2 className="text-lg font-semibold text-gray-900 mb-6">Entradas</h2>
@@ -296,63 +648,62 @@ export default function Reports() {
                   <p className="text-center text-gray-500 py-6">Nenhuma venda encontrada para este período</p>
                 ) : (
                   sales.map((sale) => (
-                    <div key={sale.id} className="flex items-center justify-between p-3 rounded-xl hover:bg-gray-50">
-                      <div className="flex-1">
-                        <p className="font-medium text-gray-900">
-                          Cliente: {sale.customer?.name || 'Cliente não identificado'}
-                        </p>
-                        <p className="text-sm text-gray-500">
-                          {sale.items && sale.items.length > 0 
-                            ? `${sale.items.length} ${sale.items.length === 1 ? 'produto' : 'produtos'}: ${sale.items[0].product_name}${sale.items.length > 1 ? ` e outros` : ''}`
-                            : 'Sem itens registrados'}
-                        </p>
-                        <p className="text-sm text-gray-500">
-                          Registrado por: {sale.created_by || 'Desconhecido'}
-                        </p>
-                        <p className="text-sm text-gray-500">
-                          {formatTimestamp(sale.created_at)}
-                        </p>
-                        <p className="text-sm text-gray-500 font-semibold">
-                          Método: {translatePaymentMethod(sale.payment_method)}
-                        </p>
-                      </div>
-                      <span className="text-green-600 font-medium ml-4">
-                        R$ {sale.total_amount.toFixed(2)}
-                      </span>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-
-            <div className="bg-white rounded-2xl shadow-sm p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-6">Saídas</h2>
-              <div className="space-y-4 max-h-96 overflow-y-auto">
-                {expenses.length === 0 ? (
-                  <p className="text-center text-gray-500 py-6">Nenhuma despesa encontrada para este período</p>
-                ) : (
-                  expenses.map((expense: any) => (
-                    <div key={expense.id} className="flex items-center justify-between p-3 rounded-xl hover:bg-gray-50">
-                      <div className="flex-1">
-                        <p className="font-medium text-gray-900">{expense.description}</p>
-                        <p className="text-sm text-gray-500">
-                          Registrado por: {expense.created_by || 'Desconhecido'}
-                        </p>
-                        <p className="text-sm text-gray-500">
-                          {formatDateInPtBR(parseDateWithoutTimezone(expense.date))}
-                        </p>
-                      </div>
-                      <span className="text-red-600 font-medium ml-4">
-                        R$ {expense.amount.toFixed(2)}
-                      </span>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
+                    <div key={sale.id} className="flex items-center justify-between p-3 rounded-xl hover:bg-gray-50"><div className="flex-1">
+                    <p className="font-medium text-gray-900">
+                      Cliente: {sale.customer?.name || 'Cliente não identificado'}
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      {sale.items && sale.items.length > 0 
+                        ? `${sale.items.length} ${sale.items.length === 1 ? 'produto' : 'produtos'}: ${sale.items[0].product_name}${sale.items.length > 1 ? ` e outros` : ''}`
+                        : 'Sem itens registrados'}
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      Registrado por: {sale.created_by || 'Desconhecido'}
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      {formatTimestamp(sale.created_at)}
+                    </p>
+                    <p className="text-sm text-gray-500 font-semibold">
+                      Método: {translatePaymentMethod(sale.payment_method)}
+                    </p>
+                  </div>
+                  <span className="text-green-600 font-medium ml-4">
+                    R$ {sale.total_amount.toFixed(2)}
+                  </span>
+                </div>
+              ))
+            )}
           </div>
-        </>
-      )}
-    </div>
-  );
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-sm p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-6">Saídas</h2>
+          <div className="space-y-4 max-h-96 overflow-y-auto">
+            {expenses.length === 0 ? (
+              <p className="text-center text-gray-500 py-6">Nenhuma despesa encontrada para este período</p>
+            ) : (
+              expenses.map((expense: any) => (
+                <div key={expense.id} className="flex items-center justify-between p-3 rounded-xl hover:bg-gray-50">
+                  <div className="flex-1">
+                    <p className="font-medium text-gray-900">{expense.description}</p>
+                    <p className="text-sm text-gray-500">
+                      Registrado por: {expense.created_by || 'Desconhecido'}
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      {formatDateInPtBR(parseDateWithoutTimezone(expense.date))}
+                    </p>
+                  </div>
+                  <span className="text-red-600 font-medium ml-4">
+                    R$ {expense.amount.toFixed(2)}
+                  </span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+    </>
+  )}
+</div>
+);
 }

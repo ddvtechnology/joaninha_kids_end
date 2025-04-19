@@ -16,9 +16,16 @@ export interface Product {
   id: string;
   name: string;
   category: ProductCategory;
+  brand: string;
+  reference: string;
+  size: string;
   description: string;
+  image_url: string;
   sale_price: number;
+  cost_price: number;
   stock_quantity: number;
+  min_stock: number;
+  hidden: boolean;
   created_at: string;
   updated_at: string;
   created_by: string;

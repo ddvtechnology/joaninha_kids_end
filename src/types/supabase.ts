@@ -93,39 +93,57 @@ export interface Database {
           name: string
           category: 'VESTIDOS' | 'CONJUNTOS' | 'MACACAO' | 'CALCADOS' | 'ACESSORIOS' | 'BODIES' | 'PIJAMAS' | 'CASACOS' | 'OUTROS'
           description: string | null
+          image_url: string | null
           sale_price: number
+          cost_price: number
           stock_quantity: number
+          min_stock: number
           created_at: string | null
           updated_at: string | null
           created_by: string | null
           updated_by: string | null
           brand: string
+          size: string
+          hidden: boolean
+          reference: string
         }
         Insert: {
           id?: string
           name: string
           category: 'VESTIDOS' | 'CONJUNTOS' | 'MACACAO' | 'CALCADOS' | 'ACESSORIOS' | 'BODIES' | 'PIJAMAS' | 'CASACOS' | 'OUTROS'
           description?: string | null
+          image_url?: string | null
           sale_price: number
+          cost_price: number
           stock_quantity?: number
+          min_stock?: number
           created_at?: string | null
           updated_at?: string | null
           created_by?: string | null
           updated_by?: string | null
           brand?: string
+          size: string
+          hidden?: boolean
+          reference?: string
         }
         Update: {
           id?: string
           name?: string
           category?: 'VESTIDOS' | 'CONJUNTOS' | 'MACACAO' | 'CALCADOS' | 'ACESSORIOS' | 'BODIES' | 'PIJAMAS' | 'CASACOS' | 'OUTROS'
           description?: string | null
+          image_url?: string | null
           sale_price?: number
+          cost_price?: number
           stock_quantity?: number
+          min_stock?: number
           created_at?: string | null
           updated_at?: string | null
           created_by?: string | null
           updated_by?: string | null
           brand?: string
+          size?: string
+          hidden?: boolean
+          reference?: string
         }
       }
       sale_items: {

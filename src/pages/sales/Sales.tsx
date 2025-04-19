@@ -301,8 +301,16 @@ export default function Sales() {
     const referenceMatch = product.reference && 
       typeof product.reference === 'string' && 
       product.reference.toLowerCase().includes(searchTerm);
+    const sizeMatch = product.size &&
+      typeof product.size === 'string' &&
+      product.size.toLowerCase().includes(searchTerm);
     
-    return nameMatch || referenceMatch;
+    return nameMatch || referenceMatch || sizeMatch;
+  };
+
+  // Função auxiliar para exibir o nome do produto com tamanho (se disponível)
+  const getProductDisplayName = (product: Product) => {
+    return product.size ? `${product.name} - ${product.size}` : product.name;
   };
 
   return (
@@ -341,7 +349,7 @@ export default function Sales() {
                   className="flex items-center justify-between p-4 rounded-xl border border-gray-100 hover:border-pink-100 hover:bg-pink-50 transition-colors"
                 >
                   <div>
-                    <h3 className="font-medium text-gray-900">{product.name}</h3>
+                    <h3 className="font-medium text-gray-900">{getProductDisplayName(product)}</h3>
                     <p className="text-sm text-gray-500">
                       {product.reference} - Estoque: {product.stock_quantity}
                     </p>
@@ -450,7 +458,7 @@ export default function Sales() {
                 className="flex items-center justify-between p-4 rounded-xl bg-gray-50"
               >
                 <div>
-                  <h3 className="font-medium text-gray-900">{item.name}</h3>
+                  <h3 className="font-medium text-gray-900">{getProductDisplayName(item)}</h3>
                   <p className="text-sm text-gray-500">
                     R$ {item.sale_price.toFixed(2)} x {item.quantity}
                   </p>

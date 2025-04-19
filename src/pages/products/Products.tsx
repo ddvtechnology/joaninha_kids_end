@@ -18,6 +18,7 @@ export default function Products() {
     category: 'VESTIDOS' as ProductCategory,
     brand: '',
     reference: '',
+    size: '',
     sale_price: '',
     stock_quantity: ''
   });
@@ -54,6 +55,7 @@ export default function Products() {
       category: 'VESTIDOS',
       brand: '',
       reference: '',
+      size: '',
       sale_price: '',
       stock_quantity: ''
     });
@@ -67,6 +69,7 @@ export default function Products() {
       category: product.category,
       brand: product.brand || '',
       reference: product.reference || '',
+      size: product.size || '',
       sale_price: product.sale_price?.toString() || '',
       stock_quantity: product.stock_quantity?.toString() || ''
     });
@@ -137,7 +140,8 @@ export default function Products() {
     const matchesSearch =
       product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       product.brand?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      product.reference?.toLowerCase().includes(searchTerm.toLowerCase());
+      product.reference?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      product.size?.toLowerCase().includes(searchTerm.toLowerCase());
 
     const matchesCategory = !selectedCategory || product.category === selectedCategory;
     return matchesSearch && matchesCategory;
@@ -196,6 +200,7 @@ export default function Products() {
                   <th className="text-left py-4 px-4 font-semibold text-gray-600">Nome</th>
                   <th className="text-left py-4 px-4 font-semibold text-gray-600">Marca</th>
                   <th className="text-left py-4 px-4 font-semibold text-gray-600">Referência</th>
+                  <th className="text-left py-4 px-4 font-semibold text-gray-600">Tamanho</th>
                   <th className="text-left py-4 px-4 font-semibold text-gray-600">Categoria</th>
                   <th className="text-right py-4 px-4 font-semibold text-gray-600">Preço</th>
                   <th className="text-right py-4 px-4 font-semibold text-gray-600">Estoque</th>
@@ -213,6 +218,9 @@ export default function Products() {
                     </td>
                     <td className="py-4 px-4">
                       <p className="text-gray-700">{product.reference || '-'}</p>
+                    </td>
+                    <td className="py-4 px-4">
+                      <p className="text-gray-700">{product.size || '-'}</p>
                     </td>
                     <td className="py-4 px-4">{product.category}</td>
                     <td className="py-4 px-4 text-right">R$ {(product.sale_price ?? 0).toFixed(2)}</td>
@@ -318,6 +326,17 @@ export default function Products() {
                     type="text"
                     name="reference"
                     value={formData.reference}
+                    onChange={handleInputChange}
+                    className="w-full px-4 py-2 rounded-xl border-2 border-gray-200 focus:border-pink-500 focus:ring focus:ring-pink-200 focus:ring-opacity-50"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Tamanho</label>
+                  <input
+                    type="text"
+                    name="size"
+                    value={formData.size}
                     onChange={handleInputChange}
                     className="w-full px-4 py-2 rounded-xl border-2 border-gray-200 focus:border-pink-500 focus:ring focus:ring-pink-200 focus:ring-opacity-50"
                   />
