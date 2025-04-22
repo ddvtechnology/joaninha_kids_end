@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ShoppingCart, Plus, Minus, Trash2, Search, DollarSign } from 'lucide-react';
+import { ShoppingCart, Plus, Minus, Trash2, Search, DollarSign, Edit, X, User, Users } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import type { Product, Customer, CartItem, PaymentMethod } from '../../types';
 import { PAYMENT_METHODS } from '../../types';
@@ -11,16 +11,21 @@ export default function Sales() {
 
   const [products, setProducts] = useState<Product[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [filteredCustomers, setFilteredCustomers] = useState<Customer[]>([]);
+  const [customerSearchTerm, setCustomerSearchTerm] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [newCustomer, setNewCustomer] = useState({ name: '', phone: '' });
   const [showNewCustomerForm, setShowNewCustomerForm] = useState(false);
+  const [showEditCustomerForm, setShowEditCustomerForm] = useState(false);
+  const [editCustomer, setEditCustomer] = useState<Customer | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('DINHEIRO');
   const [pointsInput, setPointsInput] = useState<number | ''>('');
   const userEditedPoints = useRef(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessingSale, setIsProcessingSale] = useState(false);
+  const [showCustomerModal, setShowCustomerModal] = useState(false);
 
   useEffect(() => {
     fetchProducts();
@@ -34,6 +39,19 @@ export default function Sales() {
       setPointsInput(calculatedPoints);
     }
   }, [cart]);
+
+  useEffect(() => {
+    // Filtrar clientes com base no termo de pesquisa
+    if (customerSearchTerm) {
+      const filtered = customers.filter(customer =>
+        customer.name.toLowerCase().includes(customerSearchTerm.toLowerCase()) ||
+        (customer.phone && customer.phone.includes(customerSearchTerm))
+      );
+      setFilteredCustomers(filtered);
+    } else {
+      setFilteredCustomers(customers);
+    }
+  }, [customerSearchTerm, customers]);
 
   const fetchProducts = async () => {
     setIsLoading(true);
@@ -72,6 +90,7 @@ export default function Sales() {
     }
 
     setCustomers(data);
+    setFilteredCustomers(data);
   };
 
   const addToCart = (product: Product) => {
@@ -95,7 +114,6 @@ export default function Sales() {
     });
   };
 
-
   const updateQuantity = (productId: string, change: number) => {
     setCart(currentCart =>
       currentCart.map(item => {
@@ -112,7 +130,6 @@ export default function Sales() {
       }).filter(Boolean) as CartItem[]
     );
   };
-
 
   const removeFromCart = (productId: string) => {
     setCart(currentCart => currentCart.filter(item => item.id !== productId));
@@ -131,7 +148,7 @@ export default function Sales() {
       toast.error('O nome do cliente é obrigatório');
       return;
     }
-    
+
     const { data, error } = await supabase
       .from('customers')
       .insert([newCustomer])
@@ -150,6 +167,47 @@ export default function Sales() {
     setNewCustomer({ name: '', phone: '' });
   };
 
+  const handleEditCustomer = (customer: Customer) => {
+    setEditCustomer({ ...customer });
+    setShowEditCustomerForm(true);
+  };
+
+  const handleUpdateCustomer = async () => {
+    if (!editCustomer || !editCustomer.name.trim()) {
+      toast.error('O nome do cliente é obrigatório');
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('customers')
+      .update({
+        name: editCustomer.name,
+        phone: editCustomer.phone || ''
+      })
+      .eq('id', editCustomer.id)
+      .select()
+      .single();
+
+    if (error) {
+      toast.error('Erro ao atualizar cliente');
+      console.error('Erro ao atualizar cliente:', error);
+      return;
+    }
+
+    toast.success('Cliente atualizado com sucesso!');
+
+    // Atualizar a lista de clientes
+    setCustomers(customers.map(c => c.id === data.id ? data : c));
+
+    // Se o cliente editado for o selecionado, atualize-o também
+    if (selectedCustomer && selectedCustomer.id === data.id) {
+      setSelectedCustomer(data);
+    }
+
+    setShowEditCustomerForm(false);
+    setEditCustomer(null);
+  };
+
   // Função para atualizar o estoque dos produtos
   const updateProductStock = async (soldItems: CartItem[]) => {
     try {
@@ -158,22 +216,22 @@ export default function Sales() {
         id: item.id,
         stock_quantity: item.stock_quantity - item.quantity
       }));
-      
+
       // Atualizar no banco de dados
       for (const update of updates) {
         const { error } = await supabase
           .from('products')
           .update({ stock_quantity: update.stock_quantity })
           .eq('id', update.id);
-          
+
         if (error) {
           console.error(`Erro ao atualizar estoque do produto ${update.id}:`, error);
           throw error;
         }
       }
-      
+
       // Atualizar o estado local dos produtos
-      setProducts(prevProducts => 
+      setProducts(prevProducts =>
         prevProducts.map(product => {
           const update = updates.find(u => u.id === product.id);
           if (update) {
@@ -182,7 +240,7 @@ export default function Sales() {
           return product;
         })
       );
-      
+
       console.log('Estoques atualizados com sucesso!');
     } catch (error) {
       console.error('Erro ao atualizar estoques:', error);
@@ -196,7 +254,7 @@ export default function Sales() {
       toast.error('Adicione produtos ao carrinho');
       return;
     }
-    
+
     // Impedir múltiplos cliques
     if (isProcessingSale) return;
     setIsProcessingSale(true);
@@ -260,15 +318,15 @@ export default function Sales() {
           .from('customers')
           .update({ total_points: newTotalPoints })
           .eq('id', selectedCustomer.id);
-          
+
         if (customerUpdateError) {
           console.error('Erro ao atualizar pontos do cliente:', customerUpdateError);
           toast.error('Erro ao atualizar pontos do cliente');
         } else {
           // Atualizar o estado local dos clientes
-          setCustomers(customers.map(c => 
-            c.id === selectedCustomer.id 
-              ? { ...c, total_points: newTotalPoints } 
+          setCustomers(customers.map(c =>
+            c.id === selectedCustomer.id
+              ? { ...c, total_points: newTotalPoints }
               : c
           ));
         }
@@ -293,18 +351,18 @@ export default function Sales() {
     const value = e.target.value;
     setPointsInput(value === '' ? '' : Number(value));
   };
-  
+
   // Verifica se a referência existe e é uma string antes de usar toLowerCase()
   const isProductMatch = (product: Product, term: string) => {
     const searchTerm = term.toLowerCase();
     const nameMatch = product.name.toLowerCase().includes(searchTerm);
-    const referenceMatch = product.reference && 
-      typeof product.reference === 'string' && 
+    const referenceMatch = product.reference &&
+      typeof product.reference === 'string' &&
       product.reference.toLowerCase().includes(searchTerm);
     const sizeMatch = product.size &&
       typeof product.size === 'string' &&
       product.size.toLowerCase().includes(searchTerm);
-    
+
     return nameMatch || referenceMatch || sizeMatch;
   };
 
@@ -313,13 +371,18 @@ export default function Sales() {
     return product.size ? `${product.name} - ${product.size}` : product.name;
   };
 
+  const selectCustomer = (customer: Customer) => {
+    setSelectedCustomer(customer);
+    setShowCustomerModal(false);
+  };
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Lista de Produtos */}
-      <div className="bg-white rounded-2xl shadow-sm p-6">
-        <div className="flex items-center justify-between mb-6">
+      <div className="bg-white rounded-2xl shadow-sm p-4 md:p-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
           <h2 className="text-xl font-semibold text-gray-900">Produtos</h2>
-          <div className="relative flex-1 max-w-xs ml-4">
+          <div className="relative flex-1 w-full md:max-w-xs">
             <Search className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
             <input
               type="text"
@@ -340,13 +403,13 @@ export default function Sales() {
             <p className="text-gray-500">Nenhum produto encontrado</p>
           </div>
         ) : (
-          <div className="space-y-4 max-h-[600px] overflow-y-auto">
+          <div className="space-y-4 max-h-[450px] md:max-h-[600px] overflow-y-auto">
             {products
               .filter(product => !searchTerm || isProductMatch(product, searchTerm))
               .map(product => (
                 <div
                   key={product.id}
-                  className="flex items-center justify-between p-4 rounded-xl border border-gray-100 hover:border-pink-100 hover:bg-pink-50 transition-colors"
+                  className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl border border-gray-100 hover:border-pink-100 hover:bg-pink-50 transition-colors gap-3"
                 >
                   <div>
                     <h3 className="font-medium text-gray-900">{getProductDisplayName(product)}</h3>
@@ -354,7 +417,7 @@ export default function Sales() {
                       {product.reference} - Estoque: {product.stock_quantity}
                     </p>
                   </div>
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center justify-between sm:justify-end w-full sm:w-auto gap-4">
                     <p className="font-medium text-gray-900">
                       R$ {product.sale_price.toFixed(2)}
                     </p>
@@ -373,7 +436,7 @@ export default function Sales() {
       </div>
 
       {/* Carrinho */}
-      <div className="bg-white rounded-2xl shadow-sm p-6">
+      <div className="bg-white rounded-2xl shadow-sm p-4 md:p-6">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
             <ShoppingCart className="w-6 h-6 text-pink-600" />
@@ -385,9 +448,46 @@ export default function Sales() {
         </div>
 
         {/* Cliente */}
-        <div className="mb-6">
-          <h3 className="text-sm font-medium text-gray-700 mb-2">Cliente</h3>
-          {showNewCustomerForm ? (
+        {showEditCustomerForm && editCustomer ? (
+          <div className="mb-6">
+            <h3 className="text-sm font-medium text-gray-700 mb-2">Editar Cliente</h3>
+            <div className="space-y-4 mb-4">
+              <input
+                type="text"
+                placeholder="Nome do cliente"
+                value={editCustomer.name}
+                onChange={(e) => setEditCustomer({ ...editCustomer, name: e.target.value })}
+                className="w-full px-4 py-2 rounded-xl border-2 border-gray-200 focus:border-pink-500 focus:ring focus:ring-pink-200 focus:ring-opacity-50"
+              />
+              <input
+                type="text"
+                placeholder="Telefone"
+                value={editCustomer.phone || ''}
+                onChange={(e) => setEditCustomer({ ...editCustomer, phone: e.target.value })}
+                className="w-full px-4 py-2 rounded-xl border-2 border-gray-200 focus:border-pink-500 focus:ring focus:ring-pink-200 focus:ring-opacity-50"
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={handleUpdateCustomer}
+                  className="flex-1 px-4 py-2 bg-pink-600 text-white rounded-xl hover:bg-pink-700"
+                >
+                  Atualizar
+                </button>
+                <button
+                  onClick={() => {
+                    setShowEditCustomerForm(false);
+                    setEditCustomer(null);
+                  }}
+                  className="px-4 py-2 border border-gray-200 rounded-xl hover:bg-gray-50"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : showNewCustomerForm ? (
+          <div className="mb-6">
+            <h3 className="text-sm font-medium text-gray-700 mb-2">Novo Cliente</h3>
             <div className="space-y-4 mb-4">
               <input
                 type="text"
@@ -418,35 +518,66 @@ export default function Sales() {
                 </button>
               </div>
             </div>
-          ) : (
-            <div className="flex gap-2">
-              <select
-                value={selectedCustomer?.id || ''}
-                onChange={(e) => {
-                  const customer = customers.find(c => c.id === e.target.value);
-                  setSelectedCustomer(customer || null);
-                }}
-                className="flex-1 px-4 py-2 rounded-xl border-2 border-gray-200 focus:border-pink-500 focus:ring focus:ring-pink-200 focus:ring-opacity-50"
-              >
-                <option value="">Selecione um cliente</option>
-                {customers.map(customer => (
-                  <option key={customer.id} value={customer.id}>
-                    {customer.name} - {customer.total_points || 0} pontos
-                  </option>
-                ))}
-              </select>
+          </div>
+        ) : (
+          <div className="mb-6">
+            <h3 className="text-sm font-medium text-gray-700 mb-2">Cliente</h3>
+            <div className="space-y-3">
               <button
-                onClick={() => setShowNewCustomerForm(true)}
-                className="px-4 py-2 bg-pink-600 text-white rounded-xl hover:bg-pink-700"
+                onClick={() => setShowCustomerModal(true)}
+                className="w-full flex items-center justify-between px-4 py-2 rounded-xl border-2 border-gray-200 hover:border-pink-300 focus:border-pink-500 focus:ring focus:ring-pink-200 focus:ring-opacity-50"
               >
-                Novo
+                <div className="flex items-center gap-2">
+                  <User className="w-5 h-5 text-gray-400" />
+                  <span>
+                    {selectedCustomer
+                      ? `${selectedCustomer.name} - ${selectedCustomer.total_points || 0} pontos`
+                      : 'Selecionar Cliente'}
+                  </span>
+                </div>
+                <span className="text-gray-400">
+                  {selectedCustomer ? <Edit className="w-4 h-4" /> : <Users className="w-4 h-4" />}
+                </span>
               </button>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowNewCustomerForm(true)}
+                  className="w-full px-4 py-2 bg-pink-600 text-white rounded-xl hover:bg-pink-700"
+                >
+                  Novo Cliente
+                </button>
+                {selectedCustomer && (
+                  <button
+                    onClick={() => handleEditCustomer(selectedCustomer)}
+                    className="px-4 py-2 bg-gray-100 text-gray-600 rounded-xl hover:bg-gray-200"
+                  >
+                    <Edit className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+
+              {selectedCustomer && (
+                <div className="p-3 bg-pink-50 rounded-xl">
+                  <div>
+                    <p className="font-medium">{selectedCustomer.name}</p>
+                    <div className="flex justify-between items-center">
+                      <p className="text-sm text-gray-600">
+                        {selectedCustomer.phone || 'Sem telefone'}
+                      </p>
+                      <p className="text-sm font-medium text-pink-600">
+                        {selectedCustomer.total_points || 0} pontos
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Itens do Carrinho */}
-        <div className="space-y-4 mb-6 max-h-[300px] overflow-y-auto">
+        <div className="space-y-4 mb-6 max-h-[250px] md:max-h-[300px] overflow-y-auto">
           {cart.length === 0 ? (
             <div className="text-center py-6 text-gray-500">
               Carrinho vazio. Adicione produtos para continuar.
@@ -455,7 +586,7 @@ export default function Sales() {
             cart.map(item => (
               <div
                 key={item.id}
-                className="flex items-center justify-between p-4 rounded-xl bg-gray-50"
+                className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 rounded-xl bg-gray-50 gap-3"
               >
                 <div>
                   <h3 className="font-medium text-gray-900">{getProductDisplayName(item)}</h3>
@@ -463,8 +594,8 @@ export default function Sales() {
                     R$ {item.sale_price.toFixed(2)} x {item.quantity}
                   </p>
                 </div>
-                <div className="flex items-center gap-3">
-                  <p className="font-medium text-gray-900">
+                <div className="flex items-center justify-between w-full sm:w-auto gap-3">
+                  <p className="font-medium text-gray-900 sm:mr-2">
                     R$ {(item.sale_price * item.quantity).toFixed(2)}
                   </p>
                   <div className="flex items-center gap-2">
@@ -544,6 +675,80 @@ export default function Sales() {
           </button>
         </div>
       </div>
+
+      {/* Modal de seleção de clientes */}
+      {showCustomerModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] flex flex-col">
+            <div className="p-4 border-b flex justify-between items-center">
+              <h3 className="text-lg font-medium">Selecionar Cliente</h3>
+              <button
+                onClick={() => setShowCustomerModal(false)}
+                className="p-1 rounded-full hover:bg-gray-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 border-b">
+              <div className="relative">
+                <Search className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Buscar cliente por nome ou telefone..."
+                  value={customerSearchTerm}
+                  onChange={(e) => setCustomerSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 rounded-xl border-2 border-gray-200 focus:border-pink-500 focus:ring focus:ring-pink-200 focus:ring-opacity-50"
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            <div className="overflow-y-auto flex-1">
+              {filteredCustomers.length === 0 ? (
+                <div className="p-6 text-center text-gray-500">
+                  Nenhum cliente encontrado
+                </div>
+              ) : (
+                <div className="p-2">
+                  {filteredCustomers.map(customer => (
+                    <button
+                      key={customer.id}
+                      onClick={() => selectCustomer(customer)}
+                      className="w-full text-left p-3 hover:bg-pink-50 rounded-xl transition-colors flex items-center justify-between group"
+                    >
+                      <div>
+                        <p className="font-medium">{customer.name}</p>
+                        <p className="text-sm text-gray-600">{customer.phone || 'Sem telefone'}</p>
+                      </div>
+                      <div className="flex items-center">
+                        <span className="px-2 py-1 bg-pink-100 text-pink-600 rounded-lg text-sm font-medium">
+                          {customer.total_points || 0} pontos
+                        </span>
+                        <span className="ml-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Edit className="w-4 h-4 text-gray-400" />
+                        </span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t">
+              <button
+                onClick={() => {
+                  setShowCustomerModal(false);
+                  setShowNewCustomerForm(true);
+                }}
+                className="w-full py-2 bg-pink-600 text-white rounded-xl hover:bg-pink-700"
+              >
+                Cadastrar Novo Cliente
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
