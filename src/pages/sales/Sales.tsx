@@ -22,6 +22,7 @@ export default function Sales() {
   const [editCustomer, setEditCustomer] = useState<Customer | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('DINHEIRO');
   const [pointsInput, setPointsInput] = useState<number | ''>('');
+  const [discountInput, setDiscountInput] = useState<number | ''>('');
   const userEditedPoints = useRef(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessingSale, setIsProcessingSale] = useState(false);
@@ -33,12 +34,12 @@ export default function Sales() {
   }, []);
 
   useEffect(() => {
-    const total = calculateTotal();
-    const calculatedPoints = Math.floor(total / 10);
+    const total = calculateSubtotal();
+    const calculatedPoints = Math.floor(calculateTotal() / 10);
     if (!userEditedPoints.current) {
       setPointsInput(calculatedPoints);
     }
-  }, [cart]);
+  }, [cart, discountInput]);
 
   useEffect(() => {
     // Filtrar clientes com base no termo de pesquisa
@@ -135,8 +136,20 @@ export default function Sales() {
     setCart(currentCart => currentCart.filter(item => item.id !== productId));
   };
 
-  const calculateTotal = () => {
+  const calculateSubtotal = () => {
     return cart.reduce((total, item) => total + (item.sale_price * item.quantity), 0);
+  };
+
+  const calculateDiscountAmount = () => {
+    const subtotal = calculateSubtotal();
+    const discountPercent = discountInput === '' ? 0 : Number(discountInput);
+    return (subtotal * discountPercent) / 100;
+  };
+
+  const calculateTotal = () => {
+    const subtotal = calculateSubtotal();
+    const discountAmount = calculateDiscountAmount();
+    return subtotal - discountAmount;
   };
 
   const calculatePoints = () => {
@@ -337,6 +350,7 @@ export default function Sales() {
       setSelectedCustomer(null);
       setPaymentMethod('DINHEIRO');
       setPointsInput('');
+      setDiscountInput('');
       userEditedPoints.current = false;
     } catch (error) {
       toast.error('Erro inesperado ao registrar venda');
@@ -350,6 +364,15 @@ export default function Sales() {
     userEditedPoints.current = true;
     const value = e.target.value;
     setPointsInput(value === '' ? '' : Number(value));
+  };
+
+  const handleDiscountInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    const numValue = value === '' ? '' : Number(value);
+    // Limitando o desconto a 100%
+    if (numValue === '' || numValue <= 100) {
+      setDiscountInput(numValue);
+    }
   };
 
   // Verifica se a referência existe e é uma string antes de usar toLowerCase()
@@ -646,8 +669,38 @@ export default function Sales() {
         <div className="border-t pt-4">
           <div className="flex items-center justify-between mb-4">
             <span className="text-gray-600">Subtotal:</span>
-            <span className="font-medium">R$ {calculateTotal().toFixed(2)}</span>
+            <span className="font-medium">R$ {calculateSubtotal().toFixed(2)}</span>
           </div>
+          
+          {/* Campo de Desconto (%) */}
+          <div className="flex items-center justify-between mb-4">
+            <label htmlFor="discountInput" className="text-gray-600">Desconto (%):</label>
+            <div className="flex items-center">
+              <input
+                id="discountInput"
+                type="number"
+                min={0}
+                max={100}
+                value={discountInput}
+                onChange={handleDiscountInputChange}
+                className="w-20 px-2 py-1 rounded-xl border-2 border-gray-200 focus:border-pink-500 focus:ring focus:ring-pink-200 focus:ring-opacity-50 text-center font-medium text-blue-600"
+              />
+              {discountInput !== '' && Number(discountInput) > 0 && (
+                <span className="ml-2 text-sm text-blue-600">
+                  (- R$ {calculateDiscountAmount().toFixed(2)})
+                </span>
+              )}
+            </div>
+          </div>
+          
+          {/* Total com desconto aplicado (se houver) */}
+          {discountInput !== '' && Number(discountInput) > 0 && (
+            <div className="flex items-center justify-between mb-4">
+              <span className="text-gray-800 font-medium">Total com desconto:</span>
+              <span className="font-bold text-blue-600">R$ {calculateTotal().toFixed(2)}</span>
+            </div>
+          )}
+          
           <div className="flex items-center justify-between mb-6">
             <label htmlFor="pointsInput" className="text-gray-600">Pontos a ganhar:</label>
             <input
@@ -679,7 +732,7 @@ export default function Sales() {
       {/* Modal de seleção de clientes */}
       {showCustomerModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] flex flex-col">
+         <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] flex flex-col">
             <div className="p-4 border-b flex justify-between items-center">
               <h3 className="text-lg font-medium">Selecionar Cliente</h3>
               <button
