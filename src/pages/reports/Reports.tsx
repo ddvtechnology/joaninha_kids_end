@@ -142,10 +142,39 @@ export default function Reports() {
         setErrorMessage(`Erro ao buscar despesas: ${expensesError.message}`);
       }
 
+      // Buscar contas pagas (bills) dentro do período para incluir no relatório
+      const { data: paidBillsData, error: paidBillsError } = await supabase
+        .from('bills')
+        .select('*')
+        .eq('status', 'PAGO')
+        .gte('payment_date', formattedStartDate)
+        .lte('payment_date', formattedEndDate)
+        .order('payment_date', { ascending: false });
+
+      if (paidBillsError) {
+        console.error('Erro ao buscar contas pagas:', paidBillsError);
+        setErrorMessage(`Erro ao buscar contas pagas: ${paidBillsError.message}`);
+      }
+
       console.log('Despesas encontradas:', expensesData?.length);
+      console.log('Contas pagas encontradas:', paidBillsData?.length);
+
+      // Mapear contas pagas para formato de despesa para unificar exibição
+      const mappedPaidBills = (paidBillsData || []).map(bill => ({
+        id: bill.id,
+        description: bill.description,
+        amount: bill.amount,
+        category: bill.category,
+        date: bill.payment_date,
+        created_by: bill.created_by,
+        isBill: true  // flag para identificar que é uma conta paga
+      }));
+
+      // Unir despesas e contas pagas
+      const combinedExpenses = [...(expensesData || []), ...mappedPaidBills];
 
       setSales(salesData || []);
-      setExpenses(expensesData || []);
+      setExpenses(combinedExpenses);
       
       // Processar dados de vendas por marca
       if (salesData && salesData.length > 0) {
