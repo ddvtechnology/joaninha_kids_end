@@ -280,9 +280,18 @@ export default function BillsAndExpensesManager() {
         return;
       }
 
-      setBills(data || []);
+      // Ordenar contas para que pendentes apareçam primeiro, depois por data de vencimento ascendente
+      const sortedBills = (data || []).sort((a, b) => {
+        if (a.status === b.status) {
+          return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
+        }
+        if (a.status === 'PENDENTE') return -1;
+        if (b.status === 'PENDENTE') return 1;
+        return 0;
+      });
+      setBills(sortedBills);
       // CORREÇÃO: Atualizar notificações aqui também garante que estão sempre sincronizadas
-      updateNotifications(data || []);
+      updateNotifications(sortedBills);
     } catch (err) {
       console.error('Erro na requisição:', err);
       toast.error('Falha na conexão com o banco de dados');
@@ -498,22 +507,34 @@ export default function BillsAndExpensesManager() {
         return;
       }
 
-      // Registrar como despesa
-      const { error: expenseError } = await supabase
+      // Verificar se já existe despesa vinculada a esta conta
+      const { data: existingExpenses, error: existingError } = await supabase
         .from('expenses')
-        .insert([{
-          description: bill.description,
-          amount: bill.amount,
-          category: bill.category,
-          date: formatDateForDB(today),
-          created_by: user?.email || 'anonymous',
-          // Adicionar o ID da conta original para rastreamento
-          bill_id: bill.id  // Novo campo para rastreamento
-        }]);
+        .select('id')
+        .eq('bill_id', bill.id);
 
-      if (expenseError) {
-        toast.error('Erro ao registrar despesa');
-        console.error('Erro ao registrar despesa:', expenseError);
+      if (existingError) {
+        console.error('Erro ao verificar despesas existentes:', existingError);
+      }
+
+      if (!existingExpenses || existingExpenses.length === 0) {
+        // Registrar como despesa
+        const { error: expenseError } = await supabase
+          .from('expenses')
+          .insert([{
+            description: bill.description,
+            amount: bill.amount,
+            category: bill.category,
+            date: formatDateForDB(today),
+            created_by: user?.email || 'anonymous',
+            // Adicionar o ID da conta original para rastreamento
+            bill_id: bill.id  // Novo campo para rastreamento
+          }]);
+
+        if (expenseError) {
+          toast.error('Erro ao registrar despesa');
+          console.error('Erro ao registrar despesa:', expenseError);
+        }
       }
 
       // Registrar transação financeira

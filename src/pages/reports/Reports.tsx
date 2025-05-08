@@ -159,8 +159,13 @@ export default function Reports() {
       console.log('Despesas encontradas:', expensesData?.length);
       console.log('Contas pagas encontradas:', paidBillsData?.length);
 
-      // Mapear contas pagas para formato de despesa para unificar exibição
-      const mappedPaidBills = (paidBillsData || []).map(bill => ({
+      // Filtrar contas pagas que já possuem despesa vinculada
+      const billsWithNoExpense = (paidBillsData || []).filter(bill => {
+        return !(expensesData || []).some(expense => expense.bill_id === bill.id);
+      });
+
+      // Mapear contas pagas restantes para formato de despesa para unificar exibição
+      const mappedPaidBills = billsWithNoExpense.map(bill => ({
         id: bill.id,
         description: bill.description,
         amount: bill.amount,
@@ -170,7 +175,7 @@ export default function Reports() {
         isBill: true  // flag para identificar que é uma conta paga
       }));
 
-      // Unir despesas e contas pagas
+      // Unir despesas e contas pagas filtradas
       const combinedExpenses = [...(expensesData || []), ...mappedPaidBills];
 
       setSales(salesData || []);
