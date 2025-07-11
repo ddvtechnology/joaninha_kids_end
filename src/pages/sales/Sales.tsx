@@ -195,7 +195,8 @@ export default function Sales() {
       .from('customers')
       .update({
         name: editCustomer.name,
-        phone: editCustomer.phone || ''
+        phone: editCustomer.phone || '',
+        total_points: editCustomer.total_points || 0
       })
       .eq('id', editCustomer.id)
       .select()
@@ -487,6 +488,14 @@ export default function Sales() {
                 placeholder="Telefone"
                 value={editCustomer.phone || ''}
                 onChange={(e) => setEditCustomer({ ...editCustomer, phone: e.target.value })}
+                className="w-full px-4 py-2 rounded-xl border-2 border-gray-200 focus:border-pink-500 focus:ring focus:ring-pink-200 focus:ring-opacity-50"
+              />
+              <input
+                type="number"
+                min={0}
+                placeholder="Pontos do Cliente"
+                value={editCustomer.total_points || 0}
+                onChange={(e) => setEditCustomer({ ...editCustomer, total_points: Number(e.target.value) })}
                 className="w-full px-4 py-2 rounded-xl border-2 border-gray-200 focus:border-pink-500 focus:ring focus:ring-pink-200 focus:ring-opacity-50"
               />
               <div className="flex gap-2">
