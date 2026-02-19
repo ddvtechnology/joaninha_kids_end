@@ -358,7 +358,10 @@ const Dashboard = () => {
                       Registrado por: {expense.created_by || 'Desconhecido'}
                     </p>
                     <p className="text-sm text-gray-500">
-                      {expense.created_at ? format(new Date(expense.created_at), "dd 'de' MMMM 'às' HH:mm", { locale: ptBR }) : ''}
+                      Data da despesa: {expense.date ? format(new Date(expense.date + 'T12:00:00'), "dd 'de' MMMM 'de' yyyy", { locale: ptBR }) : '-'}
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      Registrado em: {expense.created_at ? format(new Date(expense.created_at), "dd 'de' MMMM 'às' HH:mm", { locale: ptBR }) : '-'}
                     </p>
                   </div>
                   <span className="text-red-600 font-medium">
