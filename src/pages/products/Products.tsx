@@ -1,10 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Package2, Search, Plus, Edit2, Trash2, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import type { Product, ProductCategory } from '../../types';
 import { PRODUCT_CATEGORIES } from '../../types';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
+
+const MAX_PRODUCTS_LOAD = 5000;
+
+function escapeIlike(term: string): string {
+  return term.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+}
 
 export default function Products() {
   const { user } = useAuth();
@@ -13,6 +19,7 @@ export default function Products() {
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [showModal, setShowModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [loadingProducts, setLoadingProducts] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     category: 'VESTIDOS' as ProductCategory,
@@ -23,24 +30,45 @@ export default function Products() {
     stock_quantity: ''
   });
 
-  useEffect(() => {
-    fetchProducts();
+  const fetchProducts = useCallback(async (search?: string, category?: string) => {
+    setLoadingProducts(true);
+    try {
+      const term = (search ?? '').trim();
+      let query = supabase
+        .from('products')
+        .select('*')
+        .eq('hidden', false)
+        .order('name');
+
+      if (category) {
+        query = query.eq('category', category);
+      }
+
+      if (term.length > 0) {
+        const pattern = `%${escapeIlike(term)}%`;
+        query = query.or(
+          `name.ilike.${pattern},reference.ilike.${pattern},brand.ilike.${pattern},size.ilike.${pattern}`
+        );
+      } else {
+        query = query.limit(MAX_PRODUCTS_LOAD);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        toast.error('Erro ao carregar produtos');
+        return;
+      }
+
+      setProducts(data || []);
+    } finally {
+      setLoadingProducts(false);
+    }
   }, []);
 
-  const fetchProducts = async () => {
-    const { data, error } = await supabase
-      .from('products')
-      .select('*')
-      .eq('hidden', true)
-      .order('name');
-
-    if (error) {
-      toast.error('Erro ao carregar produtos');
-      return;
-    }
-
-    setProducts(data || []);
-  };
+  useEffect(() => {
+    fetchProducts(searchTerm, selectedCategory || undefined);
+  }, [searchTerm, selectedCategory, fetchProducts]);
 
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
@@ -81,7 +109,7 @@ export default function Products() {
 
     const { error } = await supabase
       .from('products')
-      .update({ hidden: false }) // Soft delete
+      .update({ hidden: true }) // Soft delete (ocultar)
       .eq('id', productId);
 
     if (error) {
@@ -90,7 +118,7 @@ export default function Products() {
     }
 
     toast.success('Produto deletado com sucesso');
-    fetchProducts();
+    fetchProducts(searchTerm, selectedCategory || undefined);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -103,7 +131,7 @@ export default function Products() {
       updated_at: new Date().toISOString(),
       created_by: user?.email,
       updated_by: user?.email,
-      hidden: true
+      hidden: false
     };
 
     if (editingProduct) {
@@ -133,19 +161,10 @@ export default function Products() {
 
     setShowModal(false);
     resetForm();
-    fetchProducts();
+    fetchProducts(searchTerm, selectedCategory || undefined);
   };
 
-  const filteredProducts = products.filter((product) => {
-    const matchesSearch =
-      product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      product.brand?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      product.reference?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      product.size?.toLowerCase().includes(searchTerm.toLowerCase());
-
-    const matchesCategory = !selectedCategory || product.category === selectedCategory;
-    return matchesSearch && matchesCategory;
-  });
+  const filteredProducts = products;
 
   return (
     <div>
@@ -194,6 +213,9 @@ export default function Products() {
 
           {/* Tabela de Produtos */}
           <div className="overflow-x-auto">
+            {loadingProducts ? (
+              <div className="py-12 text-center text-gray-500">Carregando produtos...</div>
+            ) : (
             <table className="w-full">
               <thead>
                 <tr className="border-b border-gray-200">
@@ -255,6 +277,7 @@ export default function Products() {
                 ))}
               </tbody>
             </table>
+            )}
           </div>
         </div>
       </div>

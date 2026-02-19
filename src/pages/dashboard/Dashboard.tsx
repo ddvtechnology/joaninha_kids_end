@@ -178,11 +178,11 @@ const Dashboard = () => {
   const fetchStockQuantity = useCallback(async () => {
     if (!user) return;
 
-    // Supondo que exista um campo 'hidden' na tabela 'products' que indica se o produto está oculto
+    // hidden=false = produtos visíveis/ativos; hidden=true = ocultos/encerrados
     const { data, error } = await supabase
       .from('products')
       .select('stock_quantity')
-      .eq('hidden', true); // Aqui estamos filtrando para pegar apenas os produtos não ocultos
+      .eq('hidden', false);
 
     if (error) {
       console.error('Erro ao buscar estoque:', error);

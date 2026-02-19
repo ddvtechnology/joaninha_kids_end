@@ -1,10 +1,16 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ShoppingCart, Plus, Minus, Trash2, Search, DollarSign, Edit, X, User, Users } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import type { Product, Customer, CartItem, PaymentMethod } from '../../types';
 import { PAYMENT_METHODS } from '../../types';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
+
+const MAX_PRODUCTS_LOAD = 5000;
+
+function escapeIlike(term: string): string {
+  return term.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+}
 
 export default function Sales() {
   const { user } = useAuth();
@@ -28,10 +34,55 @@ export default function Sales() {
   const [isProcessingSale, setIsProcessingSale] = useState(false);
   const [showCustomerModal, setShowCustomerModal] = useState(false);
 
+  const fetchProducts = useCallback(async (search?: string) => {
+    setIsLoading(true);
+    try {
+      const term = (search ?? '').trim();
+      let query = supabase
+        .from('products')
+        .select('*')
+        .eq('hidden', false)
+        .order('name');
+
+      if (term.length > 0) {
+        const pattern = `%${escapeIlike(term)}%`;
+        query = query.or(
+          `name.ilike.${pattern},reference.ilike.${pattern},brand.ilike.${pattern},size.ilike.${pattern}`
+        );
+      } else {
+        query = query.limit(MAX_PRODUCTS_LOAD);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        toast.error('Erro ao carregar produtos');
+        console.error('Erro ao buscar produtos:', error);
+        return;
+      }
+
+      setProducts(data || []);
+    } catch (err) {
+      console.error('Erro inesperado ao buscar produtos:', err);
+      toast.error('Erro inesperado ao carregar produtos');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
-    fetchProducts();
     fetchCustomers();
   }, []);
+
+  useEffect(() => {
+    const term = searchTerm.trim();
+    if (term === '') {
+      fetchProducts('');
+      return;
+    }
+    const timerId = window.setTimeout(() => fetchProducts(term), 300);
+    return () => window.clearTimeout(timerId);
+  }, [searchTerm, fetchProducts]);
 
   useEffect(() => {
     const total = calculateSubtotal();
@@ -53,31 +104,6 @@ export default function Sales() {
       setFilteredCustomers(customers);
     }
   }, [customerSearchTerm, customers]);
-
-  const fetchProducts = async () => {
-    setIsLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('products')
-        .select('*')
-        .eq('hidden', true) // Mantido true conforme o original - produtos ativos
-        .order('name');
-
-      if (error) {
-        toast.error('Erro ao carregar produtos');
-        console.error('Erro ao buscar produtos:', error);
-        return;
-      }
-
-      console.log(`Produtos carregados: ${data?.length || 0}`);
-      setProducts(data || []);
-    } catch (err) {
-      console.error('Erro inesperado ao buscar produtos:', err);
-      toast.error('Erro inesperado ao carregar produtos');
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const fetchCustomers = async () => {
     const { data, error } = await supabase
@@ -376,19 +402,20 @@ export default function Sales() {
     }
   };
 
-  // Verifica se a referência existe e é uma string antes de usar toLowerCase()
   const isProductMatch = (product: Product, term: string) => {
-    const searchTerm = term.toLowerCase();
-    const nameMatch = product.name.toLowerCase().includes(searchTerm);
-    const referenceMatch = product.reference &&
-      typeof product.reference === 'string' &&
-      product.reference.toLowerCase().includes(searchTerm);
-    const sizeMatch = product.size &&
-      typeof product.size === 'string' &&
-      product.size.toLowerCase().includes(searchTerm);
-
-    return nameMatch || referenceMatch || sizeMatch;
+    const t = term.trim().toLowerCase();
+    if (!t) return true;
+    return (
+      String(product.name ?? '').toLowerCase().includes(t) ||
+      String(product.reference ?? '').toLowerCase().includes(t) ||
+      String(product.brand ?? '').toLowerCase().includes(t) ||
+      String(product.size ?? '').toLowerCase().includes(t)
+    );
   };
+
+  const productsToShow = !searchTerm.trim()
+    ? products
+    : products.filter(p => isProductMatch(p, searchTerm));
 
   // Função auxiliar para exibir o nome do produto com tamanho (se disponível)
   const getProductDisplayName = (product: Product) => {
@@ -428,9 +455,7 @@ export default function Sales() {
           </div>
         ) : (
           <div className="space-y-4 max-h-[450px] md:max-h-[600px] overflow-y-auto">
-            {products
-              .filter(product => !searchTerm || isProductMatch(product, searchTerm))
-              .map(product => (
+            {productsToShow.map(product => (
                 <div
                   key={product.id}
                   className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl border border-gray-100 hover:border-pink-100 hover:bg-pink-50 transition-colors gap-3"
