@@ -50,12 +50,16 @@ interface Expense {
   category?: string;
 }
 
-function formatDateSafe(dateStr: string | null | undefined, formatStr: string): string {
+/** Formata data da despesa (YYYY-MM-DD ou ISO): evita mudar de dia por fuso. */
+function formatExpenseDate(dateStr: string | null | undefined): string {
   if (!dateStr) return '-';
   try {
-    const d = dateStr.includes('T') ? new Date(dateStr) : new Date(dateStr + 'T12:00:00');
-    if (Number.isNaN(d.getTime())) return '-';
-    return format(d, formatStr, { locale: ptBR });
+    const datePart = dateStr.slice(0, 10);
+    const [y, m, d] = datePart.split('-').map(Number);
+    if (!y || !m || !d) return '-';
+    const localDate = new Date(y, m - 1, d);
+    if (Number.isNaN(localDate.getTime())) return '-';
+    return format(localDate, "dd 'de' MMMM 'de' yyyy", { locale: ptBR });
   } catch {
     return '-';
   }
@@ -369,11 +373,12 @@ const Dashboard = () => {
                       Registrado por: {expense.created_by || 'Desconhecido'}
                     </p>
                     <p className="text-sm text-gray-500">
-                      Data da despesa: {formatDateSafe(expense.date, "dd 'de' MMMM 'de' yyyy")}
+                      Registrado em: {expense.created_at ? format(new Date(expense.created_at), "dd 'de' MMMM 'às' HH:mm", { locale: ptBR }) : '-'}
                     </p>
                     <p className="text-sm text-gray-500">
-                      Registrado em: {formatDateSafe(expense.created_at, "dd 'de' MMMM 'às' HH:mm")}
+                      Data da despesa: {formatExpenseDate(expense.date)}
                     </p>
+
                   </div>
                   <span className="text-red-600 font-medium">
                     R$ {expense.amount?.toFixed(2) || '0.00'}
