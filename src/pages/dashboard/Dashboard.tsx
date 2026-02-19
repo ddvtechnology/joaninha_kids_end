@@ -50,6 +50,17 @@ interface Expense {
   category?: string;
 }
 
+function formatDateSafe(dateStr: string | null | undefined, formatStr: string): string {
+  if (!dateStr) return '-';
+  try {
+    const d = dateStr.includes('T') ? new Date(dateStr) : new Date(dateStr + 'T12:00:00');
+    if (Number.isNaN(d.getTime())) return '-';
+    return format(d, formatStr, { locale: ptBR });
+  } catch {
+    return '-';
+  }
+}
+
 const Dashboard = () => {
   const { user } = useAuth();
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -358,10 +369,10 @@ const Dashboard = () => {
                       Registrado por: {expense.created_by || 'Desconhecido'}
                     </p>
                     <p className="text-sm text-gray-500">
-                      Data da despesa: {expense.date ? format(new Date(expense.date + 'T12:00:00'), "dd 'de' MMMM 'de' yyyy", { locale: ptBR }) : '-'}
+                      Data da despesa: {formatDateSafe(expense.date, "dd 'de' MMMM 'de' yyyy")}
                     </p>
                     <p className="text-sm text-gray-500">
-                      Registrado em: {expense.created_at ? format(new Date(expense.created_at), "dd 'de' MMMM 'às' HH:mm", { locale: ptBR }) : '-'}
+                      Registrado em: {formatDateSafe(expense.created_at, "dd 'de' MMMM 'às' HH:mm")}
                     </p>
                   </div>
                   <span className="text-red-600 font-medium">
