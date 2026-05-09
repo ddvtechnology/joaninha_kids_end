@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { BabyIcon } from 'lucide-react';
+import { BabyIcon, Eye, EyeOff } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const { signIn, loading } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -56,16 +57,26 @@ export default function Login() {
               <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
                 Senha
               </label>
-              <input
-                type="password"
-                id="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="block w-full px-4 py-3 rounded-xl border-2 border-gray-200 shadow-sm focus:border-pink-500 focus:ring focus:ring-pink-200 focus:ring-opacity-50 transition-colors"
-                placeholder="••••••••"
-                required
-                disabled={loading}
-              />
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  id="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="block w-full px-4 py-3 rounded-xl border-2 border-gray-200 shadow-sm focus:border-pink-500 focus:ring focus:ring-pink-200 focus:ring-opacity-50 transition-colors pr-12"
+                  placeholder="••••••••"
+                  required
+                  disabled={loading}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 focus:outline-none"
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                </button>
+              </div>
             </div>
             <button
               type="submit"
@@ -85,7 +96,7 @@ export default function Login() {
         </div>
         <div className="px-8 py-4 bg-gradient-to-r from-pink-50 to-purple-50 border-t border-gray-100">
           <p className="text-xs text-center text-gray-500">
-            © {new Date().getFullYear()} DDV TECHNOLOGY. Todos os direitos reservados.
+            © {new Date().getFullYear()} DM TECHNOLOGY. Todos os direitos reservados.
           </p>
         </div>
       </div>
