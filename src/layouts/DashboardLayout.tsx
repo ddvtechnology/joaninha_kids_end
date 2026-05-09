@@ -37,7 +37,7 @@ const DashboardLayout = () => {
     <div className="min-h-screen bg-gradient-to-br from-pink-50 to-purple-50">
       <div className="flex h-screen">
         {/* Sidebar */}
-        <div className="w-72 bg-white shadow-xl">
+        <div className="w-72 bg-white shadow-x2">
           <div className="flex flex-col h-full">
             <div className="flex flex-col items-center p-6 border-b bg-gradient-to-r from-pink-50 to-purple-50">
               <div className="w-32 h-32 bg-gray-100 rounded-full mb-4 flex items-center justify-center border-4 border-pink-200">
