@@ -6,6 +6,7 @@ import DashboardLayout from './layouts/DashboardLayout';
 import Login from './pages/auth/Login';
 import Dashboard from './pages/dashboard/Dashboard';
 import Products from './pages/products/Products';
+import StockControl from './pages/products/StockControl';
 import Sales from './pages/sales/Sales';
 import Reports from './pages/reports/Reports';
 import Expenses from './pages/expenses/expenses';
@@ -21,6 +22,7 @@ function App() {
         <Route element={<DashboardLayout />}>
           <Route path="/" element={<Dashboard />} />
           <Route path="/products" element={<Products />} />
+          <Route path="/stock" element={<StockControl />} />
           <Route path="/sales" element={<Sales />} />
           <Route path="/expenses" element={<Expenses />} />
           <Route path="/reports" element={<Reports />} />

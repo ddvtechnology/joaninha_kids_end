@@ -1,7 +1,7 @@
 import React from 'react';
 import { Outlet, Navigate, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { LayoutDashboard, Package, DollarSign, LogOut, BarChart3, Receipt, BabyIcon } from 'lucide-react';
+import { LayoutDashboard, Package, DollarSign, LogOut, BarChart3, Receipt, BabyIcon, ClipboardList } from 'lucide-react';
 
 const DashboardLayout = () => {
   const { user, loading, signOut } = useAuth();
@@ -27,6 +27,7 @@ const DashboardLayout = () => {
   const navigation = [
     { name: 'Início', href: '/', icon: LayoutDashboard },
     { name: 'Produtos', href: '/products', icon: Package },
+    { name: 'Estoque', href: '/stock', icon: ClipboardList },
     { name: 'Vendas', href: '/sales', icon: DollarSign },
     { name: 'Despesas', href: '/expenses', icon: Receipt },
     { name: 'Relatórios', href: '/reports', icon: BarChart3 },
