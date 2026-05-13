@@ -26,6 +26,7 @@ export default function Products() {
     brand: '',
     reference: '',
     size: '',
+    gender: 'UNISSEX',
     sale_price: '',
     stock_quantity: ''
   });
@@ -84,6 +85,7 @@ export default function Products() {
       brand: '',
       reference: '',
       size: '',
+      gender: 'UNISSEX',
       sale_price: '',
       stock_quantity: ''
     });
@@ -98,6 +100,7 @@ export default function Products() {
       brand: product.brand || '',
       reference: product.reference || '',
       size: product.size || '',
+      gender: product.gender || 'UNISSEX',
       sale_price: product.sale_price?.toString() || '',
       stock_quantity: product.stock_quantity?.toString() || ''
     });
@@ -224,6 +227,7 @@ export default function Products() {
                   <th className="text-left py-4 px-4 font-semibold text-gray-600">Referência</th>
                   <th className="text-left py-4 px-4 font-semibold text-gray-600">Tamanho</th>
                   <th className="text-left py-4 px-4 font-semibold text-gray-600">Categoria</th>
+                  <th className="text-left py-4 px-4 font-semibold text-gray-600">Sexo</th>
                   <th className="text-right py-4 px-4 font-semibold text-gray-600">Preço</th>
                   <th className="text-right py-4 px-4 font-semibold text-gray-600">Estoque</th>
                   <th className="text-right py-4 px-4 font-semibold text-gray-600">Ações</th>
@@ -245,6 +249,7 @@ export default function Products() {
                       <p className="text-gray-700">{product.size || '-'}</p>
                     </td>
                     <td className="py-4 px-4">{product.category}</td>
+                    <td className="py-4 px-4 text-gray-700">{product.gender || 'UNISSEX'}</td>
                     <td className="py-4 px-4 text-right">R$ {(product.sale_price ?? 0).toFixed(2)}</td>
                     <td className="py-4 px-4 text-right">
                       <span
@@ -329,6 +334,21 @@ export default function Products() {
                         {category.replace(/_/g, ' ')}
                       </option>
                     ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Sexo</label>
+                  <select
+                    name="gender"
+                    value={formData.gender}
+                    onChange={handleInputChange}
+                    required
+                    className="w-full px-4 py-2 rounded-xl border-2 border-gray-200 focus:border-pink-500 focus:ring focus:ring-pink-200 focus:ring-opacity-50"
+                  >
+                    <option value="UNISSEX">Unissex</option>
+                    <option value="FEMININO">Feminino</option>
+                    <option value="MASCULINO">Masculino</option>
                   </select>
                 </div>
 

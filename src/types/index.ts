@@ -19,6 +19,7 @@ export interface Product {
   brand: string;
   reference: string;
   size: string;
+  gender?: 'MASCULINO' | 'FEMININO' | 'UNISSEX' | string;
   description: string;
   image_url: string;
   sale_price: number;

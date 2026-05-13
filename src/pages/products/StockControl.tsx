@@ -16,6 +16,8 @@ export default function StockControl() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [selectedSize, setSelectedSize] = useState<string>('');
+  const [selectedGender, setSelectedGender] = useState<string>('');
+  const [summaryGender, setSummaryGender] = useState<string>('');
   const [loadingProducts, setLoadingProducts] = useState(false);
   
   const [showModal, setShowModal] = useState(false);
@@ -64,6 +66,9 @@ export default function StockControl() {
       // Considera apenas produtos que realmente têm estoque > 0
       if (!p.stock_quantity || p.stock_quantity <= 0) return;
 
+      // Filtro específico do painel de resumo
+      if (summaryGender && p.gender !== summaryGender) return;
+
       const cat = p.category.replace(/_/g, ' ');
       const size = p.size?.toUpperCase().trim() || 'Sem Tamanho';
       const qty = p.stock_quantity; // Soma a quantidade física de estoque
@@ -73,7 +78,7 @@ export default function StockControl() {
       matrix[cat]['TOTAL'] = (matrix[cat]['TOTAL'] || 0) + qty;
     });
     return matrix;
-  }, [products]);
+  }, [products, summaryGender]);
 
   // Apply local filtering since we already loaded the data
   const filteredProducts = useMemo(() => {
@@ -85,10 +90,11 @@ export default function StockControl() {
         
       const matchCategory = selectedCategory === '' || product.category === selectedCategory;
       const matchSize = selectedSize === '' || product.size?.toUpperCase().trim() === selectedSize;
+      const matchGender = selectedGender === '' || product.gender === selectedGender;
 
-      return matchSearch && matchCategory && matchSize;
+      return matchSearch && matchCategory && matchSize && matchGender;
     });
-  }, [products, searchTerm, selectedCategory, selectedSize]);
+  }, [products, searchTerm, selectedCategory, selectedSize, selectedGender]);
 
   const handleEditStock = (product: Product) => {
     setEditingProduct(product);
@@ -130,10 +136,22 @@ export default function StockControl() {
 
       {/* Resumo de Estoque */}
       <div className="mb-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-          <Package className="w-5 h-5 text-pink-600" />
-          Resumo de Estoque por Categoria e Tamanho
-        </h2>
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-4">
+          <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+            <Package className="w-5 h-5 text-pink-600" />
+            Resumo de Estoque por Categoria e Tamanho
+          </h2>
+          <select
+            value={summaryGender}
+            onChange={(e) => setSummaryGender(e.target.value)}
+            className="px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-pink-500 focus:ring focus:ring-pink-200 focus:ring-opacity-50 transition-colors text-sm bg-white"
+          >
+            <option value="">Todos os Sexos</option>
+            <option value="UNISSEX">Unissex</option>
+            <option value="FEMININO">Feminino</option>
+            <option value="MASCULINO">Masculino</option>
+          </select>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
           {Object.entries(stockMatrix)
             .sort((a, b) => b[1].TOTAL - a[1].TOTAL)
@@ -203,6 +221,17 @@ export default function StockControl() {
                   </option>
                 ))}
               </select>
+
+              <select
+                value={selectedGender}
+                onChange={(e) => setSelectedGender(e.target.value)}
+                className="flex-1 px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-pink-500 focus:ring focus:ring-pink-200 focus:ring-opacity-50 transition-colors"
+              >
+                <option value="">Todos os Sexos</option>
+                <option value="UNISSEX">Unissex</option>
+                <option value="FEMININO">Feminino</option>
+                <option value="MASCULINO">Masculino</option>
+              </select>
             </div>
           </div>
 
@@ -216,6 +245,7 @@ export default function StockControl() {
                 <tr className="border-b border-gray-200 bg-gray-50">
                   <th className="text-left py-4 px-4 font-semibold text-gray-600 rounded-tl-lg">Produto</th>
                   <th className="text-left py-4 px-4 font-semibold text-gray-600">Categoria</th>
+                  <th className="text-left py-4 px-4 font-semibold text-gray-600">Sexo</th>
                   <th className="text-left py-4 px-4 font-semibold text-gray-600">Tamanho</th>
                   <th className="text-center py-4 px-4 font-semibold text-gray-600">Status</th>
                   <th className="text-right py-4 px-4 font-semibold text-gray-600">Qtd. Estoque</th>
@@ -234,6 +264,7 @@ export default function StockControl() {
                         <p className="text-sm text-gray-500">Ref: {product.reference || '-'} | {product.brand || 'Sem marca'}</p>
                       </td>
                       <td className="py-4 px-4 text-gray-700">{product.category}</td>
+                      <td className="py-4 px-4 text-gray-700">{product.gender || 'UNISSEX'}</td>
                       <td className="py-4 px-4 font-medium text-gray-800">{product.size || '-'}</td>
                       <td className="py-4 px-4 text-center">
                         {isLowStock ? (
@@ -266,7 +297,7 @@ export default function StockControl() {
                 })}
                 {filteredProducts.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="py-8 text-center text-gray-500">
+                    <td colSpan={7} className="py-8 text-center text-gray-500">
                       Nenhum produto encontrado com os filtros selecionados.
                     </td>
                   </tr>
