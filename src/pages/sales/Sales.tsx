@@ -27,6 +27,7 @@ export default function Sales() {
   const [showEditCustomerForm, setShowEditCustomerForm] = useState(false);
   const [editCustomer, setEditCustomer] = useState<Customer | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('DINHEIRO');
+  const [seller, setSeller] = useState<string>('');
   const [pointsInput, setPointsInput] = useState<number | ''>('');
   const [discountInput, setDiscountInput] = useState<number | ''>('');
   const userEditedPoints = useRef(false);
@@ -295,6 +296,11 @@ export default function Sales() {
       return;
     }
 
+    if (!seller) {
+      toast.error('Selecione uma vendedora antes de finalizar a venda');
+      return;
+    }
+
     // Impedir múltiplos cliques
     if (isProcessingSale) return;
     setIsProcessingSale(true);
@@ -308,6 +314,7 @@ export default function Sales() {
       payment_method: paymentMethod,
       points_earned: points,
       created_by: user?.email ?? null,
+      seller: seller,
     };
 
     try {
@@ -376,6 +383,7 @@ export default function Sales() {
       setCart([]);
       setSelectedCustomer(null);
       setPaymentMethod('DINHEIRO');
+      setSeller('');
       setPointsInput('');
       setDiscountInput('');
       userEditedPoints.current = false;
@@ -696,6 +704,21 @@ export default function Sales() {
                 {method.label}
               </option>
             ))}
+          </select>
+        </div>
+
+        {/* Vendedora */}
+        <div className="mb-6">
+          <h3 className="text-sm font-medium text-gray-700 mb-2">Vendedora</h3>
+          <select
+            value={seller}
+            onChange={(e) => setSeller(e.target.value)}
+            className="w-full px-4 py-2 rounded-xl border-2 border-gray-200 focus:border-pink-500 focus:ring focus:ring-pink-200 focus:ring-opacity-50"
+            required
+          >
+            <option value="" disabled>Selecione a vendedora</option>
+            <option value="Joanna Marques">Joanna Marques</option>
+            <option value="Michelly Araújo">Michelly Araújo</option>
           </select>
         </div>
 

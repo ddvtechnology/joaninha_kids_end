@@ -73,6 +73,7 @@ export interface Sale {
   points_earned: number;
   created_at: string;
   created_by: string;
+  seller?: string;
   items: SaleItem[];
   customer?: Customer;
 }

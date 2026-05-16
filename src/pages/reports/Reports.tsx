@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { BarChart3, Calendar, ArrowDown, ArrowUp, FileDown, PieChart } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { BarChart3, Calendar, ArrowDown, ArrowUp, FileDown, PieChart, Users, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { format, startOfMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -71,6 +71,20 @@ export default function Reports() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [brandSalesData, setBrandSalesData] = useState<{brand: string, amount: number, percentage: number}[]>([]);
   const [showBrandStats, setShowBrandStats] = useState(false);
+  const [showSellerModal, setShowSellerModal] = useState(false);
+
+  const sellerStats = useMemo(() => {
+    const stats: Record<string, { count: number; total: number }> = {};
+    sales.forEach(sale => {
+      const seller = sale.seller || 'Não informada';
+      if (!stats[seller]) stats[seller] = { count: 0, total: 0 };
+      stats[seller].count += 1;
+      stats[seller].total += sale.total_amount;
+    });
+    return Object.entries(stats)
+      .map(([seller, data]) => ({ seller, ...data }))
+      .sort((a, b) => b.total - a.total);
+  }, [sales]);
 
   useEffect(() => {
     fetchData();
@@ -511,31 +525,37 @@ const calculateBrandPercentages = (salesData) => {
           <h1 className="text-2xl font-semibold text-gray-900">Relatórios</h1>
         </div>
         <div className="flex gap-4 items-center">
-          <DatePicker
-            selected={startDate || undefined}
-            onChange={(date: Date | null) => setStartDate(date)}
-            selectsStart
-            startDate={startDate || undefined}
-            endDate={endDate || undefined}
-            dateFormat="dd/MM/yyyy"
-            locale={ptBR}
-            className="px-4 py-2 rounded-xl border-2 border-gray-200 focus:border-pink-500 focus:ring focus:ring-pink-200 focus:ring-opacity-50"
-            placeholderText="Data Início"
-            calendarStartDay={1}
-          />
-          <DatePicker
-            selected={endDate || undefined}
-            onChange={(date: Date | null) => setEndDate(date)}
-            selectsEnd
-            startDate={startDate || undefined}
-            endDate={endDate || undefined}
-            minDate={startDate || undefined}
-            dateFormat="dd/MM/yyyy"
-            locale={ptBR}
-            className="px-4 py-2 rounded-xl border-2 border-gray-200 focus:border-pink-500 focus:ring focus:ring-pink-200 focus:ring-opacity-50"
-            placeholderText="Data Fim"
-            calendarStartDay={1}
-          />
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-gray-700">Início:</label>
+            <DatePicker
+              selected={startDate || undefined}
+              onChange={(date: Date | null) => setStartDate(date)}
+              selectsStart
+              startDate={startDate || undefined}
+              endDate={endDate || undefined}
+              dateFormat="dd/MM/yyyy"
+              locale={ptBR}
+              className="w-32 px-4 py-2 rounded-xl border-2 border-gray-200 focus:border-pink-500 focus:ring focus:ring-pink-200 focus:ring-opacity-50"
+              placeholderText="Data Início"
+              calendarStartDay={1}
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-gray-700">Fim:</label>
+            <DatePicker
+              selected={endDate || undefined}
+              onChange={(date: Date | null) => setEndDate(date)}
+              selectsEnd
+              startDate={startDate || undefined}
+              endDate={endDate || undefined}
+              minDate={startDate || undefined}
+              dateFormat="dd/MM/yyyy"
+              locale={ptBR}
+              className="w-32 px-4 py-2 rounded-xl border-2 border-gray-200 focus:border-pink-500 focus:ring focus:ring-pink-200 focus:ring-opacity-50"
+              placeholderText="Data Fim"
+              calendarStartDay={1}
+            />
+          </div>
           <select
             value={paymentMethodFilter}
             onChange={(e) => setPaymentMethodFilter(e.target.value)}
@@ -573,6 +593,13 @@ const calculateBrandPercentages = (salesData) => {
         >
           <FileDown className="w-5 h-5" />
           Exportar Excel
+        </button>
+        <button 
+          onClick={() => setShowSellerModal(true)} 
+          className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition"
+        >
+          <Users className="w-5 h-5" />
+          Vendas por Vendedora
         </button>
       </div>
 
@@ -737,6 +764,42 @@ const calculateBrandPercentages = (salesData) => {
         </div>
       </div>
     </>
+  )}
+
+  {/* Modal de Vendedoras */}
+  {showSellerModal && (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col">
+        <div className="p-6 border-b flex justify-between items-center">
+          <h3 className="text-xl font-bold text-gray-900">Vendas por Vendedora</h3>
+          <button
+            onClick={() => setShowSellerModal(false)}
+            className="p-2 rounded-full hover:bg-gray-100"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="p-6 overflow-y-auto">
+          {sellerStats.length === 0 ? (
+            <p className="text-center text-gray-500 py-4">Nenhuma venda no período</p>
+          ) : (
+            <div className="space-y-4">
+              {sellerStats.map(stat => (
+                <div key={stat.seller} className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="font-semibold text-gray-900 text-lg">{stat.seller}</span>
+                    <span className="text-pink-600 font-bold text-lg">R$ {stat.total.toFixed(2)}</span>
+                  </div>
+                  <div className="text-sm text-gray-500">
+                    {stat.count} {stat.count === 1 ? 'venda realizada' : 'vendas realizadas'}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   )}
 </div>
 );
