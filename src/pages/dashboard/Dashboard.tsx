@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { BarChart, Package, DollarSign, TrendingUp, Calendar, Sun } from 'lucide-react';
+import { BarChart, Package, DollarSign, TrendingUp, Sun, X } from 'lucide-react';
 import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { supabase } from '../../lib/supabase';
@@ -30,14 +30,25 @@ interface FinancialSummary {
   period: string;
 }
 
+interface SaleItem {
+  id: string;
+  product_id: string;
+  product_name: string;
+  quantity: number;
+  unit_price: number;
+  total_price: number;
+}
+
 interface Sale {
   id: string;
-  customer?: { name: string };
-  items?: { product_name: string }[];
+  customer?: { name: string; phone?: string };
+  items?: SaleItem[];
   created_by?: string;
   created_at?: string;
   payment_method?: string;
   total_amount?: number;
+  points_earned?: number;
+  seller?: string;
 }
 
 interface Expense {
@@ -48,7 +59,21 @@ interface Expense {
   date?: string;
   amount?: number;
   category?: string;
+  bill_id?: string;
 }
+
+const translatePaymentMethod = (method: string | undefined) => {
+  const methods: Record<string, string> = {
+    PIX: 'PIX',
+    DINHEIRO: 'Dinheiro',
+    CARTAO_DEBITO: 'Cartão de Débito',
+    CARTAO_CREDITO: 'Cartão de Crédito',
+  };
+  return method ? (methods[method] || method) : '-';
+};
+
+const formatCurrency = (value: number | undefined) =>
+  `R$ ${(value ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 /** Formata data da despesa (YYYY-MM-DD ou ISO): evita mudar de dia por fuso. */
 function formatExpenseDate(dateStr: string | null | undefined): string {
@@ -72,6 +97,8 @@ const Dashboard = () => {
   const [stockQuantity, setStockQuantity] = useState(0);
   const [periodSales, setPeriodSales] = useState<Sale[]>([]);
   const [periodExpenses, setPeriodExpenses] = useState<Expense[]>([]);
+  const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
+  const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
   const [financialSummary, setFinancialSummary] = useState<FinancialSummary>({
     revenue: 0,
     costs: 0,
@@ -123,7 +150,7 @@ const Dashboard = () => {
     // Current period revenue (from sales)
     const { data: salesData, error: salesError, count } = await supabase
       .from('sales')
-      .select('*, customer:customers(name), items:sale_items(*)', { count: 'exact' })
+      .select('*, customer:customers(name, phone), items:sale_items(*)', { count: 'exact' })
       .gte('created_at', startDate.toISOString())
       .lte('created_at', endDate.toISOString())
       .order('created_at', { ascending: false });
@@ -329,28 +356,32 @@ const Dashboard = () => {
               <p className="text-gray-500 text-center py-4">Nenhuma venda registrada neste período</p>
             ) : (
               periodSales.map((sale) => (
-                <div key={sale.id} className="flex items-center justify-between p-3 rounded-xl hover:bg-gray-50">
-                  <div>
-                    <p className="font-medium text-gray-900">
+                <button
+                  key={sale.id}
+                  type="button"
+                  onClick={() => setSelectedSale(sale)}
+                  className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-gray-50 text-left cursor-pointer transition-colors"
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-gray-900 truncate">
                       Cliente: {sale.customer?.name || 'Cliente não identificado'}
                     </p>
-                    <p className="text-sm text-gray-500">
-                      Produto: {sale.items?.[0]?.product_name || 'Produto não identificado'}
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      Registrado por: {sale.created_by || 'Desconhecido'}
+                    <p className="text-sm text-gray-500 truncate">
+                      {sale.items && sale.items.length > 0
+                        ? `${sale.items.length} ${sale.items.length === 1 ? 'produto' : 'produtos'}: ${sale.items[0].product_name}${sale.items.length > 1 ? ' e outros' : ''}`
+                        : 'Sem itens registrados'}
                     </p>
                     <p className="text-sm text-gray-500">
                       {sale.created_at ? format(new Date(sale.created_at), "dd 'de' MMMM 'às' HH:mm", { locale: ptBR }) : ''}
+                      {' · '}
+                      {translatePaymentMethod(sale.payment_method)}
                     </p>
-                    <p className="text-sm text-gray-500 font-semibold">
-                      Método: {sale.payment_method}
-                    </p>
+                    <p className="text-xs text-pink-600 mt-1">Clique para ver detalhes</p>
                   </div>
-                  <span className="text-green-600 font-medium">
-                    R$ {sale.total_amount?.toFixed(2) || '0.00'}
+                  <span className="text-green-600 font-medium ml-4 shrink-0">
+                    {formatCurrency(sale.total_amount)}
                   </span>
-                </div>
+                </button>
               ))
             )}
           </div>
@@ -363,32 +394,207 @@ const Dashboard = () => {
               <p className="text-gray-500 text-center py-4">Nenhuma despesa registrada neste período</p>
             ) : (
               periodExpenses.map((expense) => (
-                <div key={expense.id} className="flex items-center justify-between p-3 rounded-xl hover:bg-gray-50">
-                  <div>
-                    <p className="font-medium text-gray-900">{expense.description}</p>
+                <button
+                  key={expense.id}
+                  type="button"
+                  onClick={() => setSelectedExpense(expense)}
+                  className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-gray-50 text-left cursor-pointer transition-colors"
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-gray-900 truncate">{expense.description}</p>
                     <p className="text-sm text-gray-500">
-                      Categoria: {expense.category || 'Não categorizado'}
+                      {expense.category || 'Não categorizado'}
+                      {' · '}
+                      {formatExpenseDate(expense.date)}
                     </p>
-                    <p className="text-sm text-gray-500">
-                      Registrado por: {expense.created_by || 'Desconhecido'}
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      Registrado em: {expense.created_at ? format(new Date(expense.created_at), "dd 'de' MMMM 'às' HH:mm", { locale: ptBR }) : '-'}
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      Data da despesa: {formatExpenseDate(expense.date)}
-                    </p>
-
+                    <p className="text-xs text-pink-600 mt-1">Clique para ver detalhes</p>
                   </div>
-                  <span className="text-red-600 font-medium">
-                    R$ {expense.amount?.toFixed(2) || '0.00'}
+                  <span className="text-red-600 font-medium ml-4 shrink-0">
+                    {formatCurrency(expense.amount)}
                   </span>
-                </div>
+                </button>
               ))
             )}
           </div>
         </div>
       </div>
+
+      {/* Modal — detalhes da venda (entrada) */}
+      {selectedSale && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          onClick={() => setSelectedSale(null)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-6 border-b flex justify-between items-center shrink-0">
+              <h3 className="text-xl font-bold text-gray-900">Detalhes da Venda</h3>
+              <button
+                type="button"
+                onClick={() => setSelectedSale(null)}
+                className="p-2 rounded-full hover:bg-gray-100"
+                aria-label="Fechar"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                <div>
+                  <p className="text-gray-500">Cliente</p>
+                  <p className="font-medium text-gray-900">
+                    {selectedSale.customer?.name || 'Cliente não identificado'}
+                  </p>
+                </div>
+                {selectedSale.customer?.phone && (
+                  <div>
+                    <p className="text-gray-500">Telefone</p>
+                    <p className="font-medium text-gray-900">{selectedSale.customer.phone}</p>
+                  </div>
+                )}
+                {selectedSale.seller && (
+                  <div>
+                    <p className="text-gray-500">Vendedora</p>
+                    <p className="font-medium text-gray-900">{selectedSale.seller}</p>
+                  </div>
+                )}
+                <div>
+                  <p className="text-gray-500">Método de pagamento</p>
+                  <p className="font-medium text-gray-900">
+                    {translatePaymentMethod(selectedSale.payment_method)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Data e hora</p>
+                  <p className="font-medium text-gray-900">
+                    {selectedSale.created_at
+                      ? format(new Date(selectedSale.created_at), "dd 'de' MMMM 'de' yyyy 'às' HH:mm", { locale: ptBR })
+                      : '-'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Registrado por</p>
+                  <p className="font-medium text-gray-900">{selectedSale.created_by || 'Desconhecido'}</p>
+                </div>
+                {(selectedSale.points_earned ?? 0) > 0 && (
+                  <div>
+                    <p className="text-gray-500">Pontos ganhos</p>
+                    <p className="font-medium text-gray-900">{selectedSale.points_earned}</p>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <p className="text-sm font-semibold text-gray-900 mb-2">Produtos</p>
+                {selectedSale.items && selectedSale.items.length > 0 ? (
+                  <div className="border rounded-xl overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50 text-gray-600">
+                        <tr>
+                          <th className="text-left p-3 font-medium">Produto</th>
+                          <th className="text-center p-3 font-medium">Qtd</th>
+                          <th className="text-right p-3 font-medium">Unit.</th>
+                          <th className="text-right p-3 font-medium">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {selectedSale.items.map((item) => (
+                          <tr key={item.id}>
+                            <td className="p-3 text-gray-900">{item.product_name}</td>
+                            <td className="p-3 text-center text-gray-700">{item.quantity}</td>
+                            <td className="p-3 text-right text-gray-700">{formatCurrency(item.unit_price)}</td>
+                            <td className="p-3 text-right font-medium text-gray-900">
+                              {formatCurrency(item.total_price)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="text-gray-500 text-sm">Nenhum item registrado</p>
+                )}
+              </div>
+
+              <div className="flex justify-between items-center pt-2 border-t">
+                <span className="font-semibold text-gray-900">Total da venda</span>
+                <span className="text-xl font-bold text-green-600">
+                  {formatCurrency(selectedSale.total_amount)}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal — detalhes da despesa (saída) */}
+      {selectedExpense && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          onClick={() => setSelectedExpense(null)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-6 border-b flex justify-between items-center shrink-0">
+              <h3 className="text-xl font-bold text-gray-900">Detalhes da Despesa</h3>
+              <button
+                type="button"
+                onClick={() => setSelectedExpense(null)}
+                className="p-2 rounded-full hover:bg-gray-100"
+                aria-label="Fechar"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto space-y-4">
+              <div>
+                <p className="text-gray-500 text-sm">Descrição</p>
+                <p className="font-medium text-gray-900 text-lg">{selectedExpense.description}</p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                <div>
+                  <p className="text-gray-500">Categoria</p>
+                  <p className="font-medium text-gray-900">
+                    {selectedExpense.category || 'Não categorizado'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Data da despesa</p>
+                  <p className="font-medium text-gray-900">{formatExpenseDate(selectedExpense.date)}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Registrado por</p>
+                  <p className="font-medium text-gray-900">{selectedExpense.created_by || 'Desconhecido'}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Registrado em</p>
+                  <p className="font-medium text-gray-900">
+                    {selectedExpense.created_at
+                      ? format(new Date(selectedExpense.created_at), "dd 'de' MMMM 'de' yyyy 'às' HH:mm", { locale: ptBR })
+                      : '-'}
+                  </p>
+                </div>
+                {selectedExpense.bill_id && (
+                  <div className="sm:col-span-2">
+                    <p className="text-gray-500">Origem</p>
+                    <p className="font-medium text-gray-900">Conta a pagar (paga)</p>
+                  </div>
+                )}
+              </div>
+              <div className="flex justify-between items-center pt-2 border-t">
+                <span className="font-semibold text-gray-900">Valor</span>
+                <span className="text-xl font-bold text-red-600">
+                  {formatCurrency(selectedExpense.amount)}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
