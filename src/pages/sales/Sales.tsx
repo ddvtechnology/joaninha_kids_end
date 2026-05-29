@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { ShoppingCart, Plus, Minus, Trash2, Search, DollarSign, Edit, X, User, Users } from 'lucide-react';
+import { ShoppingCart, Plus, Minus, Trash2, Search, DollarSign, Edit, X, User, Users, ClipboardList } from 'lucide-react';
+import SalesManagementModal from './SalesManagementModal';
 import { supabase } from '../../lib/supabase';
 import type { Product, Customer, CartItem, PaymentMethod } from '../../types';
 import { PAYMENT_METHODS } from '../../types';
@@ -34,6 +35,7 @@ export default function Sales() {
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessingSale, setIsProcessingSale] = useState(false);
   const [showCustomerModal, setShowCustomerModal] = useState(false);
+  const [showSalesManagement, setShowSalesManagement] = useState(false);
 
   const fetchProducts = useCallback(async (search?: string) => {
     setIsLoading(true);
@@ -249,47 +251,6 @@ export default function Sales() {
     setEditCustomer(null);
   };
 
-  // Função para atualizar o estoque dos produtos
-  const updateProductStock = async (soldItems: CartItem[]) => {
-    try {
-      // Preparar atualizações de estoque para cada produto
-      const updates = soldItems.map(item => ({
-        id: item.id,
-        stock_quantity: item.stock_quantity - item.quantity
-      }));
-
-      // Atualizar no banco de dados
-      for (const update of updates) {
-        const { error } = await supabase
-          .from('products')
-          .update({ stock_quantity: update.stock_quantity })
-          .eq('id', update.id);
-
-        if (error) {
-          console.error(`Erro ao atualizar estoque do produto ${update.id}:`, error);
-          throw error;
-        }
-      }
-
-      // Atualizar o estado local dos produtos
-      setProducts(prevProducts =>
-        prevProducts.map(product => {
-          const update = updates.find(u => u.id === product.id);
-          if (update) {
-            return { ...product, stock_quantity: update.stock_quantity };
-          }
-          return product;
-        })
-      );
-
-      console.log('Estoques atualizados com sucesso!');
-    } catch (error) {
-      console.error('Erro ao atualizar estoques:', error);
-      toast.error('Erro ao atualizar estoques dos produtos');
-      throw error;
-    }
-  };
-
   const handleFinalizeSale = async () => {
     if (cart.length === 0) {
       toast.error('Adicione produtos ao carrinho');
@@ -355,29 +316,11 @@ export default function Sales() {
         return;
       }
 
-      // Atualizar estoque dos produtos vendidos
-      await updateProductStock(cart);
+      // Estoque é atualizado pelo trigger do banco ao inserir sale_items
+      await fetchProducts(searchTerm);
 
-      // Atualizar pontos do cliente se aplicável
-      if (selectedCustomer && points > 0) {
-        const newTotalPoints = (selectedCustomer.total_points || 0) + Number(points);
-        const { error: customerUpdateError } = await supabase
-          .from('customers')
-          .update({ total_points: newTotalPoints })
-          .eq('id', selectedCustomer.id);
-
-        if (customerUpdateError) {
-          console.error('Erro ao atualizar pontos do cliente:', customerUpdateError);
-          toast.error('Erro ao atualizar pontos do cliente');
-        } else {
-          // Atualizar o estado local dos clientes
-          setCustomers(customers.map(c =>
-            c.id === selectedCustomer.id
-              ? { ...c, total_points: newTotalPoints }
-              : c
-          ));
-        }
-      }
+      // Pontos do cliente são atualizados pelo trigger do banco ao inserir a venda
+      await fetchCustomers();
 
       toast.success('Venda registrada com sucesso!');
       setCart([]);
@@ -439,17 +382,28 @@ export default function Sales() {
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Lista de Produtos */}
       <div className="bg-white rounded-2xl shadow-sm p-4 md:p-6">
-        <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
+        <div className="mb-6 space-y-4">
           <h2 className="text-xl font-semibold text-gray-900">Produtos</h2>
-          <div className="relative flex-1 w-full md:max-w-xs">
-            <Search className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="Buscar produtos..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 rounded-xl border-2 border-gray-200 focus:border-pink-500 focus:ring focus:ring-pink-200 focus:ring-opacity-50"
-            />
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Search className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Buscar produtos..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 rounded-xl border-2 border-gray-200 focus:border-pink-500 focus:ring focus:ring-pink-200 focus:ring-opacity-50"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowSalesManagement(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-pink-600 text-white rounded-xl hover:bg-pink-700 shrink-0"
+              title="Gerenciar vendas"
+            >
+              <ClipboardList className="w-4 h-4" />
+              Vendas
+            </button>
           </div>
         </div>
 
@@ -785,6 +739,16 @@ export default function Sales() {
           </button>
         </div>
       </div>
+
+      <SalesManagementModal
+        isOpen={showSalesManagement}
+        onClose={() => setShowSalesManagement(false)}
+        customers={customers}
+        onChanged={() => {
+          fetchProducts(searchTerm);
+          fetchCustomers();
+        }}
+      />
 
       {/* Modal de seleção de clientes */}
       {showCustomerModal && (
