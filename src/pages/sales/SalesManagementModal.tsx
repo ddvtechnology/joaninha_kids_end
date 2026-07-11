@@ -150,7 +150,6 @@ export default function SalesManagementModal({ isOpen, onClose, customers, onCha
     }
 
     const visiveis = allProducts.filter((p) => p.hidden !== true);
-    console.log(`[Modal] Total buscado: ${allProducts.length} | Visíveis: ${visiveis.length}`);
     setProducts(visiveis);
   }, []);
 
