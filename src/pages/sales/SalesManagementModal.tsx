@@ -125,12 +125,33 @@ export default function SalesManagementModal({ isOpen, onClose, customers, onCha
   );
 
   const fetchProducts = useCallback(async () => {
-    const { data } = await supabase
-      .from('products')
-      .select('*')
-      .eq('hidden', false)
-      .order('name');
-    setProducts(data || []);
+    // O servidor Supabase tem max_rows=1000, então paginamos para buscar tudo
+    const pageSize = 1000;
+    let from = 0;
+    let allProducts: Product[] = [];
+
+    while (true) {
+      const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .order('name')
+        .range(from, from + pageSize - 1);
+
+      if (error) {
+        console.error('[Modal] Erro ao carregar produtos:', error);
+        toast.error('Erro ao carregar produtos');
+        break;
+      }
+
+      if (!data || data.length === 0) break;
+      allProducts = [...allProducts, ...data];
+      if (data.length < pageSize) break; // última página
+      from += pageSize;
+    }
+
+    const visiveis = allProducts.filter((p) => p.hidden !== true);
+    console.log(`[Modal] Total buscado: ${allProducts.length} | Visíveis: ${visiveis.length}`);
+    setProducts(visiveis);
   }, []);
 
   useEffect(() => {
@@ -177,7 +198,12 @@ export default function SalesManagementModal({ isOpen, onClose, customers, onCha
     if (!item) return 0;
     const product = products.find((p) => p.id === item.product_id);
     if (!product) return item.quantity;
-    return product.stock_quantity + item.quantity;
+    // O estoque atual já foi deduzido quando a venda foi criada,
+    // então devolvemos virtualmente a quantidade original da venda
+    const originalQtyInSale = selected?.items?.find(
+      (i) => i.product_id === item.product_id
+    )?.quantity ?? 0;
+    return product.stock_quantity + originalQtyInSale;
   };
 
   const filteredSales = sales.filter((sale) => {
@@ -195,8 +221,18 @@ export default function SalesManagementModal({ isOpen, onClose, customers, onCha
   });
 
   const availableProductsToAdd = products.filter((p) => {
-    if (p.stock_quantity <= 0) return false;
+    // Verifica se o produto já está na lista de edição
     if (editItems.some((i) => i.product_id === p.id)) return false;
+
+    // Estoque virtual: devolve a quantidade que já estava na venda original
+    // pois aquela quantidade foi deduzida do banco quando a venda foi feita
+    const originalQtyInSale = selected?.items?.find(
+      (i) => i.product_id === p.id
+    )?.quantity ?? 0;
+    const effectiveStock = p.stock_quantity + originalQtyInSale;
+
+    if (effectiveStock <= 0) return false;
+
     const term = productSearch.trim().toLowerCase();
     if (!term) return true;
     return (
