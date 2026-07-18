@@ -75,6 +75,7 @@ export default function SalesManagementModal({ isOpen, onClose, customers, onCha
   const [editPayment, setEditPayment] = useState<PaymentMethod>('DINHEIRO');
   const [editSeller, setEditSeller] = useState('');
   const [editPoints, setEditPoints] = useState(0);
+  const [editDiscount, setEditDiscount] = useState(0);
   const [products, setProducts] = useState<Product[]>([]);
   const [productSearch, setProductSearch] = useState('');
   const [showProductPicker, setShowProductPicker] = useState(false);
@@ -173,7 +174,8 @@ export default function SalesManagementModal({ isOpen, onClose, customers, onCha
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
-  const editTotal = editItems.reduce((s, i) => s + i.unit_price * i.quantity, 0);
+  const rawEditTotal = editItems.reduce((s, i) => s + i.unit_price * i.quantity, 0);
+  const editTotal = editDiscount > 0 ? rawEditTotal - (rawEditTotal * editDiscount) / 100 : rawEditTotal;
 
   useEffect(() => {
     if (view === 'edit' && !userEditedPoints.current) {
@@ -264,6 +266,12 @@ export default function SalesManagementModal({ isOpen, onClose, customers, onCha
     setEditPayment(sale.payment_method);
     setEditSeller(sale.seller ?? '');
     setEditPoints(sale.points_earned ?? 0);
+    
+    // Calculate original discount percentage
+    const rawTotal = sale.items.reduce((sum, item) => sum + item.unit_price * item.quantity, 0);
+    const discountPercent = rawTotal > 0 ? ((rawTotal - sale.total_amount) / rawTotal) * 100 : 0;
+    setEditDiscount(Math.round(discountPercent));
+
     userEditedPoints.current = false;
     setProductSearch('');
     setShowProductPicker(false);
@@ -310,6 +318,9 @@ export default function SalesManagementModal({ isOpen, onClose, customers, onCha
       }
     }
 
+    const rawTotal = editItems.reduce((s, i) => s + i.unit_price * i.quantity, 0);
+    const finalTotal = editDiscount > 0 ? rawTotal - (rawTotal * editDiscount) / 100 : rawTotal;
+
     setProcessing(true);
     try {
       await updateSale(selected, {
@@ -317,6 +328,7 @@ export default function SalesManagementModal({ isOpen, onClose, customers, onCha
         payment_method: editPayment,
         seller: editSeller,
         points_earned: editPoints,
+        total_amount: finalTotal,
         items: editItems,
       });
       toast.success('Venda atualizada');
@@ -698,6 +710,17 @@ export default function SalesManagementModal({ isOpen, onClose, customers, onCha
                     setEditPoints(Number(e.target.value));
                   }}
                   className="w-full mt-1 px-3 py-2 rounded-xl border border-gray-200 text-sm"
+                />
+              </div>
+              <div>
+                <label className="text-sm text-gray-600">Desconto (%)</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={editDiscount}
+                  onChange={(e) => setEditDiscount(Number(e.target.value))}
+                  className="w-full mt-1 px-3 py-2 rounded-xl border border-gray-200 text-sm focus:border-pink-500 focus:ring-1 focus:ring-pink-200"
                 />
               </div>
             </div>

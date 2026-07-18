@@ -115,6 +115,7 @@ export async function updateSale(
     payment_method: PaymentMethod;
     seller: string;
     points_earned: number;
+    total_amount: number;
     items: EditableSaleItem[];
   }
 ) {
@@ -167,11 +168,6 @@ export async function updateSale(
     }
   }
 
-  const total_amount = updates.items.reduce(
-    (sum, i) => sum + i.unit_price * i.quantity,
-    0
-  );
-
   const { error: saleUpdateError } = await supabase
     .from('sales')
     .update({
@@ -179,7 +175,7 @@ export async function updateSale(
       payment_method: updates.payment_method,
       seller: updates.seller,
       points_earned: updates.points_earned,
-      total_amount,
+      total_amount: updates.total_amount,
     })
     .eq('id', sale.id);
 
@@ -240,6 +236,6 @@ export async function updateSale(
 
   await supabase
     .from('financial_transactions')
-    .update({ amount: total_amount })
+    .update({ amount: updates.total_amount })
     .eq('description', `Venda #${sale.id}`);
 }
